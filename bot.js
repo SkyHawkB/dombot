@@ -80,8 +80,7 @@ bot.on('message', message => {
 	var headerSize=20;
 	if(histArray[0].name.length>20) 
 	  headerSize=18;
-	//var gmCommand="gm('parchment.jpg').font('jsl_ancient.ttf').fontSize('"+headerSize+"').resize("+imgWidth+","+(histLines.length*20+65)+",'!')";
-	var gmCommand="gm('parchment-min.jpg').font('Helvetica').fontSize('"+headerSize+"').resize("+imgWidth+","+(histLines.length*20+65)+",'!')";
+	var gmCommand="gm('images/parchment-min.jpg').font('Helvetica').fontSize('"+headerSize+"').resize("+imgWidth+","+(histLines.length*20+65)+",'!')";
 	gmCommand+=".drawText(20,30,'Secret history of "+histArray[0].name+"').fontSize('16')";
 	logger.info('History for: '+histArray[0].name);
 	for(var i=0; i<histLines.length; i++) {
