@@ -1,0 +1,2 @@
+# dombot
+Dominion Discord Bot
