@@ -55,7 +55,7 @@ bot.on('message', message => {
     var prefix='!'
     var msg=message.content;
     //var lineWidth=75; // this depends on font
-    var lineWidth=60;
+    var lineWidth=59
     var imgWidth=480;
     
     if(msg.startsWith(prefix+'history')) {
@@ -87,7 +87,7 @@ bot.on('message', message => {
 	  if(histLines[i].startsWith('    ')) {
             gmCommand+=".drawText(40,"+(20*i+60)+",'"+histLines[i]+"')";
 	  } else if(histLines[i].startsWith('2nd Edition')) {
-	    gmCommand+=".font('Helvetica-Bold').drawText(40,"+(20*i+60)+",'"+histLines[i]+"').font('Helvetica')";
+	    gmCommand+=".font('Helvetica-Bold').drawText(20,"+(20*i+60)+",'"+histLines[i]+"').font('Helvetica')";
 	  } else {
             gmCommand+=".drawText(20,"+(20*i+60)+",'"+histLines[i]+"')";
 	  }
