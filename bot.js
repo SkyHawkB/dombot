@@ -46,7 +46,6 @@ function splitLines(longString, maxChars) {
 }
 
 
-logger.info(cardList.cards.nicename)
 bot.on('ready', function (evt) {
     logger.info('Connected');
     logger.info('Logged in as: ');
@@ -56,6 +55,26 @@ bot.on('message', message => {
     var prefix='!'
     var msg=message.content;
 
+    // Display top 10 of leaderboard
+    if(msg.startsWith(prefix+'leader')) {
+      if(msg.indexOf('live')>0) {
+	var scavengerURL="http://dominion.lauxnet.com/load_live_leaderboard";
+	var mode="live"
+      } else {
+	var scavengerURL="http://dominion.lauxnet.com/load_leaderboard";
+        var mode="stale"
+	}
+      logger.info('Scavenger URL: '+scavengerURL)
+      request({url:scavengerURL, json:true}, function(err,response,leaderJSON) {
+        if(!err && response.statusCode == 200) {
+	  if(leaderJSON.leader_list.length>0) {
+	    var leaderMsg="Shuffle iT Top 10"+((mode=='live')?" (live)":"")+"\n-------------------------\n"; 
+	    for(i=0; i<10; i++) {
+	    	leaderMsg+=leaderJSON.leader_list[i].level+"  "+leaderJSON.leader_list[i].name+"\n";
+            }
+	    message.channel.send("```"+leaderMsg+"```");
+	    logger.info('Message: '+leaderMsg);
+    }}})}
     // Display Currene glicko-2 rating for user
     if(msg.startsWith(prefix+'rating')) {
       const ratingShift=50;
@@ -151,28 +170,12 @@ bot.on('message', message => {
 	var csoSupply=cardList.cards.filter(function(x){if(x.type == 'Event' || x.type == 'Landmark') return kingdom.includes(x.nicename)});
 
 	// If we have a looter in the set, AND no ruins already, grab a random ruins
-	const looters = ["marauder","death-cart","cultist"]
-	var looterCount = cardSupply.filter(function(x) { return looters.includes(x.nicename)}).length;
-	var ruinsCount = cardSupply.filter(function(x) { return x.type == 'Action-Ruins'}).length;
-	logger.info('Looter array length: '+looterCount)	
-	logger.info('Ruins array length: '+ruinsCount)	
-	
-	if(looterCount > 0 && ruinsCount==0) {
-		ruinsArray = cardList.cards.filter(function(x){return x.type=='Action-Ruins'});
-		cardSupply.push(ruinsArray[Math.floor(Math.random()*Math.floor(ruinsArray.length-1))]);
-	}
-
-	// Handle Knights
-	if(kingdom.indexOf('knights')>0) {
-	  logger.info('Got knights');
 	  var knightsCount = cardSupply.filter(function(x) { return (x.nicename.startsWith('sir-')||x.nicename.startsWith('dame-'))}).length;
 	  logger.info('Knights count: '+knightsCount);
 	  if(knightsCount==0) {
 	    knightsArray=cardList.cards.filter(function(x) { return (x.nicename.startsWith('sir-')||x.nicename.startsWith('dame-'))});
 	    cardSupply.push(knightsArray[Math.floor(Math.random()*Math.floor(knightsArray.length-1))]);
 	  }
-	}
-	
 	
 	const costSort = function(a,b) {
 		if(a.cost.coins<0) a.cost.coins++;
@@ -227,12 +230,8 @@ bot.on('message', message => {
 			logger.info('Bane index is: '+baneIndex)
 }				
 }
-	
-	// Always put them horizontally? 	
 	for(var i=0; i<csoFiles.length;i++) {
-			//gmCommand = gmCommand + ".in('-page','+"+(parseInt(i/2)*(csoWidth+padding)+colCount*(padding+cardWidth))+"+"+(i%2)*(padding+cardHeight)+"').in('"+csoFiles[i]+"')";
 			gmCommand = gmCommand + ".in('-page','+"+i*(csoWidth+padding)+"+"+2*(padding+cardHeight)+"').in('"+csoFiles[i]+"')";
-//		}
 	}
 
 	gmCommand = gmCommand + ".mosaic().background('transparent').stream('miff').pipe(passThrough);";
@@ -240,8 +239,6 @@ bot.on('message', message => {
 	eval(gmCommand);
 		gm(passThrough)
 		.background('transparent')
-		//.in('-font TrajanProBold')
-		//.in('-pointsize 48')
 		.fontSize('30')
 		.font('TrajanPro-Bold.ttf')
 		.draw('text +'+((baneIndex%colCount)*(padding+cardWidth)+110)+'+'+((1-Math.floor(baneIndex/colCount))*(cardHeight+padding)+290)+' BANE')
@@ -259,11 +256,6 @@ bot.on('message', message => {
             message.channel.send('Sorry! Some kingdom art not found');
         }
     }
-});
+})
 
 bot.login(config.token);
-
-
-
-
-
