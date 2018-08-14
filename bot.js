@@ -7,6 +7,7 @@ const stream = require('stream');
 const config = require("./config.json");
 const cardFile=fs.readFileSync("all_cards.json");
 const historyFile=fs.readFileSync("secret_all.json");
+const request=require("request");
 var cardList=JSON.parse(cardFile);
 var allHist=JSON.parse(historyFile);
 
@@ -54,11 +55,33 @@ bot.on('ready', function (evt) {
 bot.on('message', message => {
     var prefix='!'
     var msg=message.content;
-    //var lineWidth=75; // this depends on font
+
+    // Display Currene glicko-2 rating for user
+    if(msg.startsWith(prefix+'rating')) {
+      const ratingShift=50;
+      const ratingScale=7.5;
+      var today=new Date().toISOString().slice(0,10);
+      var shitUsername=msg.replace(prefix+'rating','').trim();
+      logger.info('Username is: '+shitUsername);
+      var scavengerURL="http://dominion.lauxnet.com/rating_history/?username="+encodeURIComponent(shitUsername)+"&date="+today;
+      logger.info('Scavenger URL: '+scavengerURL)
+      request({url:scavengerURL, json:true}, function(err,response,ratingJSON) {
+        if(!err && response.statusCode == 200) {
+	  if(ratingJSON.results.length>0) {
+	    var rating=ratingShift+ratingScale*(ratingJSON.results[0].skill-2*ratingJSON.results[0].deviation)
+	    var ratingMessage=shitUsername+": "+rating.toFixed(2)+" µ: "+ratingJSON.results[0].skill.toFixed(2)+" φ: "+ratingJSON.results[0].deviation.toFixed(2);
+	    logger.info('Message: '+ratingMessage);
+	    message.channel.send("```"+ratingMessage+"```");
+	} // fail silently?
+	}
+	})
+    }
+    
+    // Display secret history for given card
+    if(msg.startsWith(prefix+'history')) {
     var lineWidth=59
     var imgWidth=480;
-    
-    if(msg.startsWith(prefix+'history')) {
+
 	if(nicify(msg.replace(prefix+'history',''))=='help') {
 	  logger.info('Display help message');
 	  helpMsg='This command displays some of Donald X’s design notes (aka "Secret History") for a given card or *card-shaped thing*.\n\nUsage: ```!history <card name>```Example:```!history Secret Chamber```\nTo conserve channel space, the text is rendered as an image. For some of the longer histories, you may need to open the image in your browser.';
@@ -103,6 +126,7 @@ bot.on('message', message => {
 			logger.error(err);
 			throw(err);
 	}})}}
+    // Display formatted kingdom image
     if(msg.startsWith(prefix+'kingdom')) {
     	const cardWidth=320 //grab this from image?
     	const cardHeight=304 // grab this from images?
@@ -111,11 +135,8 @@ bot.on('message', message => {
 	var bane=''
 	var baneIndex
 
-        //var kingdom = msg.replace(prefix+'kingdom','').replace(/'/g,"").split(",");
         var kingdom = msg.replace(prefix+'kingdom','').split(",");
 	for(var i=0; i<kingdom.length; i++) {
-		// Find bane?
-            //kingdom[i]=kingdom[i].trim().replace(/\s/g,"-").toLowerCase();
             kingdom[i]=nicify(kingdom[i]);
 		logger.info(kingdom[i]);
 	    if(kingdom[i].indexOf('(b)')>0) {
@@ -129,8 +150,7 @@ bot.on('message', message => {
 	var cardSupply=cardList.cards.filter(function(x){if(x.type != 'Event' && x.type != 'Landmark') return kingdom.includes(x.nicename)});
 	var csoSupply=cardList.cards.filter(function(x){if(x.type == 'Event' || x.type == 'Landmark') return kingdom.includes(x.nicename)});
 
-	// How do we handle Looters?
-	// If we have a looter in the set, AND no ruins already, grab a random ruins?
+	// If we have a looter in the set, AND no ruins already, grab a random ruins
 	const looters = ["marauder","death-cart","cultist"]
 	var looterCount = cardSupply.filter(function(x) { return looters.includes(x.nicename)}).length;
 	var ruinsCount = cardSupply.filter(function(x) { return x.type == 'Action-Ruins'}).length;
