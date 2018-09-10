@@ -170,7 +170,7 @@ bot.on('message', message => {
 	var csoSupply=cardList.cards.filter(function(x){if(x.type == 'Event' || x.type == 'Landmark') return kingdom.includes(x.nicename)});
 
 	// If we have 'Knight' in the set, AND no knight listed by name already, grab a random night
-	var knightRequested = cardSupply.filter(function(x) { return (x.nicename.startswith('knight'))}).length;
+	var knightRequested = cardSupply.filter(function(x) { return (x.nicename.startsWith('knight'))}).length;
 	if(knightRequested>0) {
 	  var knightsCount = cardSupply.filter(function(x) { return (x.nicename.startsWith('sir-')||x.nicename.startsWith('dame-'))}).length;
 	  logger.info('Knights count: '+knightsCount);
