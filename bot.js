@@ -1,5 +1,4 @@
 const Discord = require('discord.js');
-const logger = require('winston');
 const gm = require('gm');
 const crypto = require('crypto');
 const fs = require('fs');
@@ -8,14 +7,19 @@ const config = require("./config.json");
 const cardFile=fs.readFileSync("all_cards.json");
 const historyFile=fs.readFileSync("secret_all.json");
 const request=require("request");
+var winston=require('winston');
+const logger = winston.createLogger({
+	level: 'debug',
+	transports: [
+		new winston.transports.Console({format: winston.format.simple()}),
+		new winston.transports.File({filename:'dombot.log'})
+	],
+	exitOnError: false,
+});
+
 var cardList=JSON.parse(cardFile);
 var allHist=JSON.parse(historyFile);
 
-
-// Configure logger settings
-logger.remove(logger.transports.Console);
-logger.add(new logger.transports.Console, {colorize: true});
-logger.level = 'debug';
 const bot = new Discord.Client();
 
 function nicify(inputName) {
@@ -188,9 +192,10 @@ bot.on('message', message => {
         logger.info('Ruins array length: '+ruinsCount)
     
      if(looterCount > 0 && ruinsCount==0) {
-     	ruinsArray = cardlist.cards.filter(function(x){return x.type=='Action-Ruins'});
+     	ruinsArray = cardList.cards.filter(function(x){return x.type=='Action-Ruins'});
      	cardSupply.push(ruinsArray[Math.floor(Math.random()*Math.floor(ruinsArray.length-1))]);
-	 }
+	ruinsCount++;
+ 	}
    
     
 	const costSort = function(a,b) {
@@ -210,7 +215,9 @@ bot.on('message', message => {
 	var kingdomFiles = [];
 	var csoFiles = [];
         var filesFound = 0;
-        if(cardSupply.length<10) {
+
+	// Need this to exempt bane/ruins
+        if(cardSupply.length-ruinsCount<10) {
             message.channel.send("Need at least 10 kingdom cards");
             return;
         }
