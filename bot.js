@@ -169,14 +169,30 @@ bot.on('message', message => {
 	var cardSupply=cardList.cards.filter(function(x){if(x.type != 'Event' && x.type != 'Landmark') return kingdom.includes(x.nicename)});
 	var csoSupply=cardList.cards.filter(function(x){if(x.type == 'Event' || x.type == 'Landmark') return kingdom.includes(x.nicename)});
 
-	// If we have a looter in the set, AND no ruins already, grab a random ruins
+	// If we have 'Knight' in the set, AND no knight listed by name already, grab a random night
+	var knightRequested = cardSupply.filter(function(x) { return (x.nicename.startswith('knight'))}).length;
+	if(knightRequested>0) {
 	  var knightsCount = cardSupply.filter(function(x) { return (x.nicename.startsWith('sir-')||x.nicename.startsWith('dame-'))}).length;
 	  logger.info('Knights count: '+knightsCount);
 	  if(knightsCount==0) {
 	    knightsArray=cardList.cards.filter(function(x) { return (x.nicename.startsWith('sir-')||x.nicename.startsWith('dame-'))});
 	    cardSupply.push(knightsArray[Math.floor(Math.random()*Math.floor(knightsArray.length-1))]);
 	  }
-	
+	}
+
+    // If we have a looter in the set, AND no ruins already, grab a random ruins?
+	const looters = ["marauder","death-cart","cultist"]
+     	var looterCount = card_supply.filter(function(x) { return looters.includes(x.nicename)}).length;
+	var ruinsCount = card_supply.filter(function(x) { return x.type == 'Action-Ruins'}).length;
+        logger.info('Looter array length: '+looterCount)
+        logger.info('Ruins array length: '+ruinsCount)
+    
+     if(looterCount > 0 && ruinsCount==0) {
+     	ruinsArray = cardlist.cards.filter(function(x){return x.type=='Action-Ruins'});
+     	cardSupply.push(ruinsArray[Math.floor(Math.random()*Math.floor(ruinsArray.length-1))]);
+	 }
+   
+    
 	const costSort = function(a,b) {
 		if(a.cost.coins<0) a.cost.coins++;
 		if(b.cost.cons<0) b.cost.coins++;
