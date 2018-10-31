@@ -1,5 +1,7 @@
 node_modules/
 images/templates
+images/art
 config.json
+config.js
 dombot.log
 logs/

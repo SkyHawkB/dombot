@@ -350,7 +350,7 @@
 {"name":"Steward","nicename":"steward","type":"Action","cost":{"coins":3,"potion":-1,"debt":-1},"set":"Intrigue"},
 {"name":"Stonemason","nicename":"stonemason","type":"Action","cost":{"coins":2,"potion":-1,"debt":-1},"set":"Guilds"},
 {"name":"Storeroom","nicename":"storeroom","type":"Action","cost":{"coins":3,"potion":-1,"debt":-1},"set":"Dark Ages"},
-{"name":"Storyteller","nicename":"storyteller","type":"Action-Reserve","cost":{"coins":5,"potion":-1,"debt":-1},"set":"Adventures"},
+{"name":"Storyteller","nicename":"storyteller","type":"Action","cost":{"coins":5,"potion":-1,"debt":-1},"set":"Adventures"},
 {"name":"Summon","nicename":"summon","type":"Event","cost":{"coins":5,"potion":-1,"debt":-1},"set":"Promos"},
 {"name":"Survivors","nicename":"survivors","type":"Action-Ruins","cost":{"coins":0,"potion":-1,"debt":-1},"set":"Dark Ages"},
 {"name":"Swamp Hag","nicename":"swamp-hag","type":"Action-Duration","cost":{"coins":5,"potion":-1,"debt":-1},"set":"Adventures"},
