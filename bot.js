@@ -6,6 +6,7 @@ const stream = require('stream');
 const config = require("./config.json");
 const cardFile=fs.readFileSync("all_cards.json");
 const historyFile=fs.readFileSync("secret_all.json");
+const artistFile=fs.readFileSync("artists.json");
 const request=require("request");
 const winston=require('winston');
 const async=require('async');
@@ -20,6 +21,7 @@ const logger = winston.createLogger({
 
 var cardList=JSON.parse(cardFile);
 var allHist=JSON.parse(historyFile);
+var cardArt=JSON.parse(artistFile);
 
 const bot = new Discord.Client();
 
@@ -59,67 +61,128 @@ bot.on('ready', function (evt) {
     bot.on('message', message => {
         var prefix='!'
         var msg=message.content;
+    if(msg.startsWith(prefix+'help')) {
+        message.channel.send("Available commands:\n------------------------------------------------\n**!kingdom** - generate kingdom image\n**!history** - display secret history for a card\n**!rating** - return Shuffle iT rating for user(s)\n**!leader** - displays top 10 of Shuffle iT leaderboard\n**!art** - shows art for card/box/card-shaped-thing\n\nFor more detailed help, type the command followed by 'help'");
+    }
 
     // Display top 10 of leaderboard
     if(msg.startsWith(prefix+'leader')) {
-        if(msg.indexOf('live')>0) {
-            var scavengerURL="http://dominion.lauxnet.com/load_live_leaderboard";
-            var mode="live"
+        if(nicify(msg.replace(prefix+'leader',''))=='help') {
+            logger.info('Display help message for !leader');
+            helpMsg='The "!leader" command queries the Scavenger site for the leaderboard and returns the top 10 players. Including the keyword *live* returns the live leaderboard. If this command does not work, it likely means that Scavenger is down.\n\nUsage: ```!leader``````!leader live```';
+            message.channel.send(helpMsg);
         } else {
-            var scavengerURL="http://dominion.lauxnet.com/load_leaderboard";
-            var mode="stale"
-        }
-        logger.info('Scavenger URL: '+scavengerURL)
-        request({url:scavengerURL, json:true}, function(err,response,leaderJSON) {
-            if(!err && response.statusCode == 200) {
-                if(leaderJSON.leader_list.length>0) {
-                    var leaderMsg="Shuffle iT Top 10"+((mode=='live')?" (live)":"")+"\n-------------------------\n"; 
-                    for(i=0; i<10; i++) {
-                        leaderMsg+=leaderJSON.leader_list[i].level+"  "+leaderJSON.leader_list[i].name+"\n";
+            if(msg.indexOf('live')>0) {
+                var scavengerURL="http://dominion.lauxnet.com/load_live_leaderboard";
+                var mode="live"
+            } else {
+                var scavengerURL="http://dominion.lauxnet.com/load_leaderboard";
+                var mode="stale"
+            }
+            logger.info('Scavenger URL: '+scavengerURL)
+                request({url:scavengerURL, json:true, timeout:10000}, function(err,response,leaderJSON) {
+                    if(!err && response.statusCode == 200) {
+                        if(leaderJSON.leader_list.length>0) {
+                            var leaderMsg="Shuffle iT Top 10"+((mode=='live')?" (live)":"")+"\n-------------------------\n"; 
+                            for(i=0; i<10; i++) {
+                                leaderMsg+=leaderJSON.leader_list[i].level+"  "+leaderJSON.leader_list[i].name+"\n";
+                            }
+                            message.channel.send("```"+leaderMsg+"```");
+                            logger.info('Message: '+leaderMsg);
+                        }
+                    } else {
+                        logger.info('Error accessing Scavenger:'+err);
+                        message.channel.send('Error accessing Scavenger');   
                     }
-                    message.channel.send("```"+leaderMsg+"```");
-                    logger.info('Message: '+leaderMsg);
-                }}})}
-    // Display Current glicko-2 rating for user
-    // Allow csv list of users?
+                })
+        }
+    }
+            // Display Current glicko-2 rating for user
+            // Allow csv list of users?
     if(msg.startsWith(prefix+'rating')) {
-        var users = msg.replace(prefix+'rating','').split(",").map(function(x) {
-            return x.trim();});
-        const ratingShift=50;
-        const ratingScale=7.5;
-        logger.info('List of users to query for rating: '+users);
-        var today=new Date().toISOString().slice(0,10);
-        var ratings = {};
+        if(nicify(msg.replace(prefix+'rating',''))=='help') {
+            logger.info('Display help message for !rating');
+            helpMsg='The "!rating" command queries the Scavenger site for the rating/skill level of the user(s) specified. If this command does not work, it likely means that Scavenger is down.\n\nUsage: ```!rating <username|username1,username2,username3...>```Examples:```!rating Stef``````!rating Stef,Dan Brooks,Dark Boons```';
+            message.channel.send(helpMsg);
+        } else {
+            var users = msg.replace(prefix+'rating','').split(",").map(function(x) {
+                return x.trim();});
+            const ratingShift=50;
+            const ratingScale=7.5;
+            logger.info('List of users to query for rating: '+users);
+            var today=new Date().toISOString().slice(0,10);
+            var ratings = {};
 
-        async.map(users, function(user,callback) {
+            async.map(users, function(user,callback) {
                 var scavengerURL="http://dominion.lauxnet.com/rating_history/?username="+encodeURIComponent(user)+"&date="+today;
                 logger.info('URL:'+scavengerURL);
-                request({url:scavengerURL, json:true}, function(err,response,ratingJSON) {
-                        if(!err && response.statusCode == 200) {
-                            if(ratingJSON.results.length>0) {
-                                var rating=ratingShift+ratingScale*(ratingJSON.results[0].skill-2*ratingJSON.results[0].deviation)
-                                //var ratingMsg=user+": "+rating.toFixed(2)+" µ: "+ratingJSON.results[0].skill.toFixed(2)+" φ: "+ratingJSON.results[0].deviation.toFixed(2)+"\n";
-                                ratingObj={user:user,rating:rating,skill:ratingJSON.results[0].skill,deviation:ratingJSON.results[0].deviation}
+                request({url:scavengerURL, json:true, timeout:10000}, function(err,response,ratingJSON) {
+                if(!err && response.statusCode == 200) {
+                    if(ratingJSON.results.length>0) {
+                        var rating=ratingShift+ratingScale*(ratingJSON.results[0].skill-2*ratingJSON.results[0].deviation)
+                ratingObj={user:user,rating:rating,skill:ratingJSON.results[0].skill,deviation:ratingJSON.results[0].deviation}
                 logger.info('Rating JSON is:'+ratingJSON);
                 logger.info('Rating Object is:'+ratingObj);
-                                return callback(null,ratingObj);
-                            }}  else {
-                                return callback(err);
-                            }                
-                    });
-        }, function(err, results) {
-            // Sort results, process into message here
-            results.sort(function(a,b) { return (a.rating>b.rating) ? -1 : (a.rating<b.rating) ? 1 : 0;});
-            var resultMsg='';
-            for(r of results) {
-                resultMsg+=r.user+": "+r.rating.toFixed(2)+" µ: "+r.skill.toFixed(2)+" φ: "+r.deviation.toFixed(2)+"\n";
-            }
-            logger.info('Results message:'+resultMsg);
-            message.channel.send("```"+resultMsg+"```");
-        });
+                return callback(null,ratingObj);
+                    }}  else {
+                        return callback(err);
+                    }                
+                });
+            }, function(err, results) {
+                if(!err) {
+                // Sort results, process into message here
+                    results.sort(function(a,b) { return (a.rating>b.rating) ? -1 : (a.rating<b.rating) ? 1 : 0;});
+                    var resultMsg='';
+                    for(r of results) {
+                        resultMsg+=r.user+": "+r.rating.toFixed(2)+" µ: "+r.skill.toFixed(2)+" φ: "+r.deviation.toFixed(2)+"\n";
+                    }
+                    logger.info('Results message:'+resultMsg);
+                    message.channel.send("```"+resultMsg+"```");
+                } else {
+                    logger.info('Error accessing Scavenger:'+err);
+                    message.channel.send('Error accessing Scavenger');   
+                }
+                
+            });
         //	if(ratingMessage.length>0)
         //	    message.channel.send("```"+ratingMessage+"```");
-    }    
+        }   
+    } 
+
+    if(msg.startsWith(prefix+'cardart')) {
+        var cardname=nicify(msg.replace(prefix+'cardart',''));
+        logger.info('Looking for art for '+cardname);
+        cardartFile = "./images/art/"+cardname+".jpg";
+
+        var illustrator=cardArt.artists.filter(function(x) { return x.card==cardname})[0].artist;
+        logger.info('Illustrator: '+illustrator);
+
+        if(fs.existsSync(cardartFile)) {
+            message.channel.send('*this command is deprecated, please use !art*\n*Illustrator: '+illustrator+'*', {files:[cardartFile]});
+            logger.info('Sent card art for: '+cardname);
+        }
+
+    }
+
+    if(msg.startsWith(prefix+'art')) {
+        if(nicify(msg.replace(prefix+'art',''))=='help') {
+            logger.info('Display help message for art');
+            helpMsg='The "!art" command shows the original, frameless art for the specified card, set, or *card-shaped-thing* (Landmark, Event, Project etc.).\n\nUsage: ```!art <card name>```\nExamples:```!art Expedition``````!art Page``````!art Dominion```';
+            message.channel.send(helpMsg);
+        } else {
+            var cardname=nicify(msg.replace(prefix+'art',''));
+            logger.info('Looking for art for '+cardname);
+            cardartFile = "./images/art/"+cardname+".jpg";
+
+            var illustrator=cardArt.artists.filter(function(x) { return x.card==cardname})[0].artist;
+            logger.info('Illustrator: '+illustrator);
+
+            if(fs.existsSync(cardartFile)) {
+                message.channel.send('*Illustrator: '+illustrator+'*', {files:[cardartFile]});
+                logger.info('Sent card art for: '+cardname);
+            }
+        }
+    }
     // Display secret history for given card
     if(msg.startsWith(prefix+'history')) {
         var lineWidth=59
@@ -228,7 +291,10 @@ bot.on('ready', function (evt) {
                         if(b.cost.cons<0) b.cost.coins++;
                         if(a.cost.coins==b.cost.coins)
                             if(a.cost.potion==b.cost.potion)
-                                return(a.cost.debt < b.cost.debt) ? -1 : (a.cost.debt > b.cost.debt) ? 1 : 0;
+                                if(a.cost.debt==b.cost.debt)
+                                    return(a.name<b.name) ? -1 : (a.name > b.name) ? 1 : 0;
+                                else
+                                    return(a.cost.debt < b.cost.debt) ? -1 : (a.cost.debt > b.cost.debt) ? 1 : 0;
                             else
                                 return(a.cost.potion < b.cost.potion) ? -1 : (a.cost.potion > b.cost.potion) ? 1 : 0;
                         else
