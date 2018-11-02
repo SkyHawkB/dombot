@@ -62,7 +62,15 @@ bot.on('ready', function (evt) {
         var prefix='!'
         var msg=message.content;
     if(msg.startsWith(prefix+'help')) {
-        message.channel.send("Available commands:\n------------------------------------------------\n**!kingdom** - generate kingdom image\n**!history** - display secret history for a card\n**!rating** - return Shuffle iT rating for user(s)\n**!leader** - displays top 10 of Shuffle iT leaderboard\n**!art** - shows art for card/box/card-shaped-thing\n\nFor more detailed help, type the command followed by 'help'");
+        var helpMsg="Available commands:\n------------------------------------------------\n";
+        helpMsg+="**!kingdom** - generate kingdom image\n";
+        helpMsg+="**!history** - display secret history for a card\n";
+        helpMsg+="**!rating** - return Shuffle iT rating for user(s)\n";
+        helpMsg+="**!leader** - displays top 10 of Shuffle iT leaderboard\n";
+        helpMsg+="**!art** - shows art for card/box/card-shaped-thing\n";
+        helpMsg+="**!stats** - show the 'markus stats' for a card\n";
+        helpMsg+="\nFor more detailed help, type the command followed by 'help'";
+        message.channel.send(helpMsg);
     }
 
     // Display top 10 of leaderboard
@@ -172,7 +180,7 @@ bot.on('ready', function (evt) {
         } else {
             var cardname=nicify(msg.replace(prefix+'art',''));
             logger.info('Looking for art for '+cardname);
-            cardartFile = "./images/art/"+cardname+".jpg";
+            var cardartFile = "./images/art/"+cardname+".jpg";
 
             var illustrator=cardArt.artists.filter(function(x) { return x.card==cardname})[0].artist;
             logger.info('Illustrator: '+illustrator);
@@ -183,6 +191,25 @@ bot.on('ready', function (evt) {
             }
         }
     }
+
+    // markus stats
+    if(msg.startsWith(prefix+'stats')) {
+        if(nicify(msg.replace(prefix+'stats',''))=='help') {
+            logger.info('Display help message for stats');
+            helpMsg='The "!stats" command shows the "markus stats" for the named card or card-shaped-thing.\n\nUsage: ```!stats <card name>```\nExamples:```!stats Expedition``````!stats Page```';
+            message.channel.send(helpMsg);
+        } else {
+            var cardname=nicify(msg.replace(prefix+'stats',''));
+            logger.info('Looking for stats for '+cardname);
+            var statsFile = "./images/markus_stats/"+cardname+".png";
+
+            if(fs.existsSync(statsFile)) {
+                message.channel.send('', {files:[statsFile]});
+                logger.info('Sent stats image for: '+cardname);
+            }
+        }
+    } 
+    
     // Display secret history for given card
     if(msg.startsWith(prefix+'history')) {
         var lineWidth=59
