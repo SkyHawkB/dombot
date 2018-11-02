@@ -322,7 +322,9 @@ bot.on('ready', function (evt) {
         helpMsg+="**!chart** - show rating/skill in a chart\n";
         helpMsg+="**!versus** - display head-to-head record for two players\n";
         helpMsg+="**!art** - shows art for card/box/card-shaped-thing\n";
+        helpMsg+="**!stats** - show the 'markus stats' for a card\n";
         helpMsg+="\nFor more detailed help, type the command followed by 'help'";
+        helpMsg+="\n\nEach of these commands also works in a Direct Message to the bot. This allows you to avoid spamming a channel if you wish.```";
         message.channel.send(helpMsg);
     }
 
@@ -345,6 +347,24 @@ bot.on('ready', function (evt) {
             }
         }
     }
+    // markus stats 
+    if(msg.startsWith(prefix+'stats')) {
+        if(nicify(msg.replace(prefix+'stats',''))=='help') {
+            logger.info('Display help message for stats');
+            helpMsg='The "!stats" command shows the "markus stats" for the named card or card-shaped-thing.\n\nUsage: ```!stats <card name>```\nExamples:```!stats Expedition``````!stats Page```';
+            message.channel.send(helpMsg);
+        } else {
+            var cardname=nicify(msg.replace(prefix+'stats',''));
+            logger.info('Looking for stats for '+cardname);
+            var statsFile = "./images/markus_stats/"+cardname+".png";
+
+            if(fs.existsSync(statsFile)) {
+                message.channel.send('', {files:[statsFile]});
+                logger.info('Sent stats image for: '+cardname);
+            }
+        }
+    }
+
 
     if(msg.startsWith(prefix+'silver')) {
         var user = msg.replace(prefix+'silver','').trim();

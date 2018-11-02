@@ -1,5 +1,7 @@
 node_modules/
 images/templates
+images/cards
+images/markus_stats
 images/art
 config.json
 config.js
