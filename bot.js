@@ -432,15 +432,15 @@ bot.on('ready', function (evt) {
             knex.from('ratingresults as rr')
                 .join('users as u1','rr.user','=','u1.id')
                 .join('users as u2','rr.opponent','=','u2.id')
-                .join('ratinghistory as rho','rho.user','=','rr.opponent')
+               // .leftOuterJoin('ratinghistory as rho',function() {
+                    //this.on('rr.opponent','rho.user').andOn(0,'rho.ratingType').andOn('rho.period',currentPeriod)})
+                .joinRaw('left outer join ratinghistory as rho on rr.opponent = rho.user and rho.ratingType=0 and rho.period=(select max(rh2.period) from ratinghistory rh2 join users on users.id = rh2.user where rh2.ratingType = 0 and users.name = \''+user+'\')')
                 .join('ratinghistory as rhu','rhu.user','=','rr.user')
                 .where('u1.name', user)
                 .andWhere('rr.ratingType', 0)
-                .andWhere('rho.ratingType',0)
                 .andWhere('rhu.ratingType',0)
                 .andWhereNot('u2.status',9)
                 .andWhere('rr.processed',0)
-                .andWhere('rho.period',currentPeriod)
                 .andWhere('rhu.period',currentPeriod)
                 .select('u1.name', 'u2.name as opponent','rr.gameid','rr.score','rho.skill as opp_mu','rho.deviation as opp_phi','rhu.volatility as user_sigma','rhu.skill as user_mu','rhu.deviation as user_phi')
                 .then(function(rows) {
@@ -450,18 +450,18 @@ bot.on('ready', function (evt) {
                         var userSigma=rows[0].user_sigma;
                         var resultsArray=[]; 
                         for(row of rows) {
+                            if(row.opp_mu == null) row.opp_mu = 0;
+                            if(row.opp_phi == null) row.opp_phi = 2;
                             resultsArray.push({win:row.score,mu:row.opp_mu,phi:row.opp_phi});
                         }
                         var newRating=glicko.update(userMu,userPhi,userSigma,0.4,resultsArray);
                         var winSummary=glicko.expectedWins(userMu,resultsArray);
-                        console.log('New µ:'+newRating.mu+' New phi:'+newRating.phi);
-                        console.log(winSummary);
                         var resultMsg='```Won '+winSummary.wins+'/'+winSummary.played+', expected: '+winSummary.expected.toFixed(2)+'\n';
                         resultMsg+='Current:\t'+(ratingScale*(userMu-2*userPhi)+ratingShift).toFixed(2)+'\tµ: '+userMu.toFixed(2).padStart(5)+'\tφ: '+userPhi.toFixed(2)+'\n'; 
                         resultMsg+='New:    \t'+(ratingScale*(newRating.mu-2*newRating.phi)+ratingShift).toFixed(2)+'\tµ: '+newRating.mu.toFixed(2).padStart(5)+'\tφ: '+newRating.phi.toFixed(2)+'```';
                         message.channel.send(resultMsg);
                     } else  {
-                        message.channel.send("No unprocessed results found, or rating history missing for some or all players.");
+                        message.channel.send("No unprocessed results found, or rating history missing player.");
                     }
                 }).catch((err) => { logger.error( err); throw err })
             .finally(() => {
