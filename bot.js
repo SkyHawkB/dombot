@@ -659,10 +659,25 @@ if(msg.startsWith(prefix+'results')) {
                             }
                             var newRating=glicko.update(userMu,userPhi,userSigma,0.4,resultsArray);
                             var winSummary=glicko.expectedWins(userMu,resultsArray);
-                            var resultMsg='```Won '+winSummary.wins+'/'+winSummary.played+', expected: '+winSummary.expected.toFixed(2)+'\n';
-                            resultMsg+='Current:\t'+(ratingScale*(userMu-2*userPhi)+ratingShift).toFixed(2)+'\tµ: '+userMu.toFixed(2).padStart(5)+'\tφ: '+userPhi.toFixed(2)+'\n'; 
-                            resultMsg+='New:    \t'+(ratingScale*(newRating.mu-2*newRating.phi)+ratingShift).toFixed(2)+'\tµ: '+newRating.mu.toFixed(2).padStart(5)+'\tφ: '+newRating.phi.toFixed(2)+'```';
-                            message.channel.send(resultMsg);
+                            //var resultMsg='```Won '+winSummary.wins+'/'+winSummary.played+', expected: '+winSummary.expected.toFixed(2)+'\n';
+                            var title='Won '+winSummary.wins+'/'+winSummary.played+', expected: '+winSummary.expected.toFixed(2)+'\n';
+                            var currentMsg=(ratingScale*(userMu-2*userPhi)+ratingShift).toFixed(2)+'\tµ: '+userMu.toFixed(2).padStart(5)+'\tφ: '+userPhi.toFixed(2)+'\n'; 
+                            var newMsg=(ratingScale*(newRating.mu-2*newRating.phi)+ratingShift).toFixed(2)+'\tµ: '+newRating.mu.toFixed(2).padStart(5)+'\tφ: '+newRating.phi.toFixed(2);
+                            if(winSummary.wins>winSummary.expected) {
+                                var winColor=parseInt(ratingGradient.rgbAt(0.95).toHex(),16);
+                            } else {
+                                var winColor=parseInt(ratingGradient.rgbAt(0.05).toHex(),16);
+                            }
+                                     message.channel.send({embed:{
+                                                         color: winColor,
+                                                         title: title,
+                                                           description: resultMsg,
+                                     fields:[{
+                                         name:"Current",
+                                     value:currentMsg},
+                                         {name:"New",
+                                     value:newMsg}]}});
+                           // message.channel.send(resultMsg);
                         } else  {
                             message.author.send("No unprocessed results found.");
                         }
@@ -921,28 +936,18 @@ if(msg.startsWith(prefix+'versus')) {
                                 logger.info('Results: '+wins[0]+"-"+wins[1]+"-"+wins[2]);
                                 if(wins[2]>0) {
                                     var winColor=parseInt(ratingGradient.rgbAt((wins[0]+0.5*wins[2])/(wins[0]+wins[1]+wins[2])).toHex(),16);
-                                    //message.channel.send("```"+player1+' v. '+player2+': '+wins[0]+"-"+wins[1]+"-"+wins[2]+"```");
                                      message.channel.send({embed:{
                                                          color: winColor,
                                                          title: player1+' v. '+player2 + " (W–L–D)",
                                                            description: wins[0]+'–'+wins[1]+'–'+wins[2]}});
-                                                         // description: "*"+info.type+"*\n"+info.text}});
-                                                         //                 description: cardText}});
                                 } else {
-                                    //var winColor=mapWinColor(wins[0]/(wins[0]+wins[1]));
-                                    var hexColor=ratingGradient.rgbAt(wins[0]/(wins[0]+wins[1])).toHex();
-                                    console.log('Hex color:'+hexColor);
                                     var winColor=parseInt(ratingGradient.rgbAt(wins[0]/(wins[0]+wins[1])).toHex(),16);
-                                    console.log('Win color:'+winColor);
-                                    //message.channel.send("```"+player1+' v. '+player2+': '+wins[0]+"-"+wins[1]+"```");
                                      message.channel.send({embed:{
-                                                         //color: 0xFF0000,
                                                          color: winColor,
                                                          title: player1+' v. '+player2 +" (W–L)",
                                                            description: wins[0]+'–'+wins[1]}});
                                 }
                             } else  {
-                                // fail silently or return message?
                                 message.author.send("No data found");
                             }
                         }).catch((err) => { logger.error( err); throw err })
