@@ -5,6 +5,7 @@ const fs = require('fs');
 const stream = require('stream');
 const config = require("./config.json");
 const cardFile=fs.readFileSync("all_cards.json");
+const completeFile=fs.readFileSync("dominion.cards.json");
 const historyFile=fs.readFileSync("secret_all.json");
 const artistFile=fs.readFileSync("artists.json");
 const request=require("request");
@@ -22,6 +23,7 @@ const logger = winston.createLogger({
 var cardList=JSON.parse(cardFile);
 var allHist=JSON.parse(historyFile);
 var cardArt=JSON.parse(artistFile);
+var fullInfo=JSON.parse(completeFile);
 
 const bot = new Discord.Client();
 
@@ -68,6 +70,7 @@ bot.on('ready', function (evt) {
         helpMsg+="**!rating** - return Shuffle iT rating for user(s)\n";
         helpMsg+="**!leader** - displays top 10 of Shuffle iT leaderboard\n";
         helpMsg+="**!art** - shows art for card/box/card-shaped-thing\n";
+        helpMsg+="**!text** - shows text for card/card-shaped-thing\n";
         helpMsg+="**!stats** - show the 'markus stats' for a card\n";
         helpMsg+="\nFor more detailed help, type the command followed by 'help'";
         message.channel.send(helpMsg);
@@ -105,8 +108,8 @@ bot.on('ready', function (evt) {
                 })
         }
     }
-            // Display Current glicko-2 rating for user
-            // Allow csv list of users?
+    // Display Current glicko-2 rating for user
+    // Allow csv list of users?
     if(msg.startsWith(prefix+'rating')) {
         if(nicify(msg.replace(prefix+'rating',''))=='help') {
             logger.info('Display help message for !rating');
@@ -125,20 +128,20 @@ bot.on('ready', function (evt) {
                 var scavengerURL="http://dominion.lauxnet.com/rating_history/?username="+encodeURIComponent(user)+"&date="+today;
                 logger.info('URL:'+scavengerURL);
                 request({url:scavengerURL, json:true, timeout:10000}, function(err,response,ratingJSON) {
-                if(!err && response.statusCode == 200) {
-                    if(ratingJSON.results.length>0) {
-                        var rating=ratingShift+ratingScale*(ratingJSON.results[0].skill-2*ratingJSON.results[0].deviation)
-                ratingObj={user:user,rating:rating,skill:ratingJSON.results[0].skill,deviation:ratingJSON.results[0].deviation}
+                    if(!err && response.statusCode == 200) {
+                        if(ratingJSON.results.length>0) {
+                            var rating=ratingShift+ratingScale*(ratingJSON.results[0].skill-2*ratingJSON.results[0].deviation)
+                    ratingObj={user:user,rating:rating,skill:ratingJSON.results[0].skill,deviation:ratingJSON.results[0].deviation}
                 logger.info('Rating JSON is:'+ratingJSON);
                 logger.info('Rating Object is:'+ratingObj);
                 return callback(null,ratingObj);
-                    }}  else {
-                        return callback(err);
-                    }                
+                        }}  else {
+                            return callback(err);
+                        }                
                 });
             }, function(err, results) {
                 if(!err) {
-                // Sort results, process into message here
+                    // Sort results, process into message here
                     results.sort(function(a,b) { return (a.rating>b.rating) ? -1 : (a.rating<b.rating) ? 1 : 0;});
                     var resultMsg='';
                     for(r of results) {
@@ -150,10 +153,10 @@ bot.on('ready', function (evt) {
                     logger.info('Error accessing Scavenger:'+err);
                     message.channel.send('Error accessing Scavenger');   
                 }
-                
+
             });
-        //	if(ratingMessage.length>0)
-        //	    message.channel.send("```"+ratingMessage+"```");
+            //	if(ratingMessage.length>0)
+            //	    message.channel.send("```"+ratingMessage+"```");
         }   
     } 
 
@@ -192,6 +195,62 @@ bot.on('ready', function (evt) {
         }
     }
 
+    if(msg.startsWith(prefix+'text')) {
+        if(nicify(msg.replace(prefix+'text',''))=='help') {
+            logger.info('Display help message for text');
+            helpMsg='The "!text" command displays the basic card information and instructions.\n\nUsage: ```!text <card name>```\nExamples:```!text Expedition``````!text Page```';
+            message.channel.send(helpMsg);
+        } else {
+            var cardname=nicify(msg.replace(prefix+'text',''));
+            var info=fullInfo.filter(function(x) { return x.nicename==cardname})[0];
+            var cardText=info.text.replace("''(","*").replace(")''","*");
+            var color='14342874';
+            switch(info.type) {
+                case 'Project':
+                    color='14720397';
+                    break;
+                case 'Landmark':
+                    color='4289797';
+                    break;
+                case 'Event':
+                    color='10197915';
+                    break;
+                case 'Hex':
+                    color='12807124';
+                    break;
+                case 'Boon':
+                    color='16774256';
+                    break;
+                case 'State':
+                    color='1';
+                    break;
+                case 'Artifact':
+                    color='9131818';
+                    break;
+                default:
+                    color='14342874';
+            }
+            if(info) {
+                if(cardText.indexOf("---")>0) {
+                    var aboveLine=cardText.split("---")[0];
+                    var belowLine=cardText.split("---")[1];
+                    message.channel.send({embed:{
+                        color: color,
+                        title: info.name,
+                        description: aboveLine,
+                        fields:[{name:"__                          __",value:belowLine}]}});
+                } else  {
+                    message.channel.send({embed:{
+                        color: color,
+                        title: info.name,
+                        description: cardText}});
+                }   
+                logger.info('Sent card text for: '+cardname);
+            }
+        }
+    }
+
+
     // markus stats
     if(msg.startsWith(prefix+'stats')) {
         if(nicify(msg.replace(prefix+'stats',''))=='help') {
@@ -203,13 +262,26 @@ bot.on('ready', function (evt) {
             logger.info('Looking for stats for '+cardname);
             var statsFile = "./images/markus_stats/"+cardname+".png";
 
+
             if(fs.existsSync(statsFile)) {
                 message.channel.send('', {files:[statsFile]});
                 logger.info('Sent stats image for: '+cardname);
+
+            } else {
+                if(cardname=='band-of-misfits' || cardname=='overlord')
+                    message.author.send('Stats gathering is broken for '+cardname);
+                else
+                    message.author.send('No stats available for '+cardname);
             }
         }
     } 
-    
+    if(msg.startsWith(prefix+'embed')) {
+        message.channel.send({embed: {
+            color: 3447003,
+            description: "I could send messages like this"
+        }});
+    }
+
     // Display secret history for given card
     if(msg.startsWith(prefix+'history')) {
         var lineWidth=59
@@ -285,8 +357,8 @@ bot.on('ready', function (evt) {
                         }
                     }	
                     // Gather info from cards based on JSON card list
-                    var cardSupply=cardList.cards.filter(function(x){if(x.type != 'Event' && x.type != 'Landmark') return kingdom.includes(x.nicename)});
-                    var csoSupply=cardList.cards.filter(function(x){if(x.type == 'Event' || x.type == 'Landmark') return kingdom.includes(x.nicename)});
+                    var cardSupply=cardList.cards.filter(function(x){if(x.type != 'Event' && x.type != 'Landmark' && x.type != 'Project') return kingdom.includes(x.nicename)});
+                    var csoSupply=cardList.cards.filter(function(x){if(x.type == 'Event' || x.type == 'Landmark' || x.type == 'Project') return kingdom.includes(x.nicename)});
 
                     // If we have 'Knight' in the set, AND no knight listed by name already, grab a random night
                     if(kingdom.indexOf("knight") > -1 || kingdom.indexOf("knights") > -1) {
