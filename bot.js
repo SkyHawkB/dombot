@@ -13,7 +13,7 @@ const completeFile=fs.readFileSync("dominion.cards.json");
 const request=require("request");
 const winston=require('winston');
 const async=require('async');
-const knex=require('knex');
+//const knex=require('knex');
 const vega=require('vega');
 const LRU=require('lru-cache');
 const glicko=require('./glicko');
@@ -35,6 +35,21 @@ const sqlLogger = winston.createLogger({
       exitOnError: false,
 });
 
+// Connect to DB, setup pool
+var dbInfo = config.shitdb.prod;
+logger.info('Database is:'+dbInfo.database);
+var knex = require('knex')({
+    client: dbInfo.client,
+    connection: {
+        host : dbInfo.host,
+    user : dbInfo.user,
+    password : dbInfo.password,
+    database : dbInfo.database}
+});
+knex.on('query',function(query) {
+    sqlLogger.info(moment().format() + " Executed query: "+query.sql+" with bindings:"+query.bindings);
+});
+
 // Set max age of cache to 30 minutes
 var ratingCache=LRU({max:2000,maxAge:30*1000*60});
 var leaderCache=LRU({max:3000,maxAge:60*1000*60});
@@ -44,7 +59,6 @@ var currentPeriod=0;
 var allHist=JSON.parse(historyFile);
 //var cardArt=JSON.parse(artistFile);
 var fullInfo=JSON.parse(completeFile);
-
 var ratingGradient=tinygradient('red','white','green');
 
 const bot = new Discord.Client();
@@ -61,8 +75,8 @@ function nicify(inputName) {
 }
 
 //function hexToIntColor(rrggbb) {
- //       var bbggrr = rrggbb.substr(4, 2) + rrggbb.substr(2, 2) + rrggbb.substr(0, 2);
- //           return parseInt(bbggrr, 16);
+//       var bbggrr = rrggbb.substr(4, 2) + rrggbb.substr(2, 2) + rrggbb.substr(0, 2);
+//           return parseInt(bbggrr, 16);
 //`}
 
 
@@ -70,13 +84,13 @@ function mapWinColor(p) {
     var color;
     if(p>1 || p<0) {
         color=0x000000;
-       } else {
-           if(p>0.5) {
-           color=Math.floor((p-0.5)/(0.5)*255)*256;
-           } else {
-               color=Math.floor(((0.5-p)/0.5)*255)*256*256;
-           }
-       }
+    } else {
+        if(p>0.5) {
+            color=Math.floor((p-0.5)/(0.5)*255)*256;
+        } else {
+            color=Math.floor(((0.5-p)/0.5)*255)*256*256;
+        }
+    }
     return color;
 }
 
@@ -121,19 +135,21 @@ function getKingdom(err, kingdomStr, drawCallback, msgCallback) {
         }
 
         if(mode=='gameid') {
-            var dbInfo = config.shitdb.prod;
-            logger.info('Database is:'+dbInfo.database);
-            var knex = require('knex')({
-                client: dbInfo.client,
-                connection: {
-                    host : dbInfo.host,
-                user : dbInfo.user,
-                password : dbInfo.password,
-                database : dbInfo.database}
-            });
-            knex.on('query',function(query) {
-                sqlLogger.info(moment().format() + " Executed query: "+query.sql+" with bindings:"+query.bindings);
-            });
+            /*
+               var dbInfo = config.shitdb.prod;
+               logger.info('Database is:'+dbInfo.database);
+               var knex = require('knex')({
+               client: dbInfo.client,
+               connection: {
+               host : dbInfo.host,
+               user : dbInfo.user,
+               password : dbInfo.password,
+               database : dbInfo.database}
+               });
+               knex.on('query',function(query) {
+               sqlLogger.info(moment().format() + " Executed query: "+query.sql+" with bindings:"+query.bindings);
+               });
+               */
             logger.info('Game ID:'+gameId);
 
             knex.from('gameresults')
@@ -365,168 +381,242 @@ bot.on('ready', function (evt) {
         var prefix='!'
         var msg=message.content;
     if(msg.startsWith(prefix+'help')) {
-        var helpMsg="Available commands:\n------------------------------------------------\n";
-        helpMsg+="**!kingdom** - generate kingdom image\n";
-        helpMsg+="**!history** - display secret history for a card\n";
-        helpMsg+="**!rating** - Shuffle iT rating for player(s)\n";
-        helpMsg+="**!results** - summary of unprocessed results for player\n";
-        helpMsg+="**!leader** - displays top of Shuffle iT leaderboard\n";
-        helpMsg+="**!peers** - for a given player, shows players +/- 5 leaderboard spots (if possible)\n";
-        helpMsg+="**!chart** - show rating/skill in a chart\n";
-        helpMsg+="**!previous** - shows previous N rated games\n";
-        helpMsg+="**!versus** - display head-to-head record for two players\n";
-        helpMsg+="**!art** - shows art for card/box/card-shaped-thing\n";
-        helpMsg+="**!text** - shows text for card/card-shaped-thing\n";
-        helpMsg+="**!stats** - show the 'markus stats' for a card\n";
-        helpMsg+="\nFor more detailed help, type the command followed by 'help'";
-        helpMsg+="\n\nEach of these commands also works in a Direct Message to the bot. This allows you to avoid spamming a channel if you wish.";
+        message.channel.send({embed:{
+            color: 3447003,
+            title: 'Dominion Discord Bot Commands',
+            //  description: prevMsg,
+            fields:[{
+                name:'Card info',
+            //value:'generate kingdom image from game ID or CSV list'},
+            value:'**!history** secret history for a card-shaped thing\n**!art** illustration for a card-shaped thing\n**!text** text for a card-shaped thing'},
+            {name:'Shuffle iT info',
+                value:'**!kingdom** generate kingdom image from game ID or CSV list\n**!rating** player rating\n**!leader** current leaderboard\n**!peers** players with similar rank\n**!chart** longitudinal rating chart\n**!versus** head-to-head results for two players\n**!results** unprocessed game results\n**!prior** summary of prior five games'},
+            {name:'More info',
+                value:'Each of these commands also works in a direct message to the bot.\nMore information for each command available by appending the word \'help\' to that command: e.g.```!kingdom help```'}]}});
+    /*
+       var helpMsg="Available commands:\n———————————————————————————————————————————\n";
+       helpMsg+="**!kingdom** - generate kingdom image\n";
+       helpMsg+="**!history** - display secret history for a card\n";
+       helpMsg+="**!rating** - Shuffle iT rating for player(s)\n";
+       helpMsg+="**!results** - summary of unprocessed results for player\n";
+       helpMsg+="**!leader** - displays top of Shuffle iT leaderboard\n";
+       helpMsg+="**!peers** - for a given player, shows players +/- 5 leaderboard spots (if possible)\n";
+       helpMsg+="**!chart** - show rating/skill in a chart\n";
+       helpMsg+="**!previous** - shows previous N rated games\n";
+       helpMsg+="**!versus** - display head-to-head record for two players\n";
+       helpMsg+="**!art** - shows art for card/box/card-shaped thing\n";
+       helpMsg+="**!text** - shows text for card/card-shaped thing\n";
+       helpMsg+="**!stats** - show the 'markus stats' for a card\n";
+       helpMsg+="\nFor more detailed help, type the command followed by 'help'";
+       helpMsg+="\n\nEach of these commands also works in a Direct Message to the bot. This allows you to avoid spamming a channel if you wish.";
+       message.channel.send(helpMsg);
+       */
+    }
+
+if(msg.startsWith(prefix+'art')) {
+    if(nicify(msg.replace(prefix+'art',''))=='help') {
+        logger.info('Display help message for art');
+        helpMsg='The "!art" command shows the original, frameless art for the specified card-shaped thing or set.\n\nExamples:```!art Expedition``````!art Page``````!art Dominion```';
         message.channel.send(helpMsg);
-    }
+    } else {
+        var cardname=nicify(msg.replace(prefix+'art',''));
+        logger.info('Looking for art for '+cardname);
+        cardartFile = "./images/art/"+cardname+".jpg";
 
-    if(msg.startsWith(prefix+'art')) {
-        if(nicify(msg.replace(prefix+'art',''))=='help') {
-            logger.info('Display help message for art');
-            helpMsg='The "!art" command shows the original, frameless art for the specified card, set, or *card-shaped-thing* (Landmark, Event, Project etc.).\n\nUsage: ```!art <card name>```\nExamples:```!art Expedition``````!art Page``````!art Dominion```';
-            message.channel.send(helpMsg);
-        } else {
-            var cardname=nicify(msg.replace(prefix+'art',''));
-            logger.info('Looking for art for '+cardname);
-            cardartFile = "./images/art/"+cardname+".jpg";
+        var illustrator=fullInfo.filter(function(x) { return x.nicename==cardname})[0].artist;
+        logger.info('Illustrator: '+illustrator);
 
-            var illustrator=fullInfo.filter(function(x) { return x.nicename==cardname})[0].artist;
-            logger.info('Illustrator: '+illustrator);
-
-            if(fs.existsSync(cardartFile)) {
-                message.channel.send('*Illustrator: '+illustrator+'*', {files:[cardartFile]});
-                logger.info('Sent card art for: '+cardname);
-            }
+        if(fs.existsSync(cardartFile)) {
+            message.channel.send('*Illustrator: '+illustrator+'*', {files:[cardartFile]});
+            logger.info('Sent card art for: '+cardname);
         }
     }
-    if(msg.startsWith(prefix+'previous')) {
-        if(nicify(msg.replace(prefix+'previous',''))=='help') {
-            logger.info('Display help message for previous');
-            helpMsg='The "!previous" commands displays a brief summary of the previous 10 games, including game IDs.\n\nUsage: ```!previous <user>```\nExample:```!previous Cave-o-sapien```';
-            message.channel.send(helpMsg);
-        } else {
-            var user = msg.replace(prefix+'previous','').trim();
-            logger.info('Looking up unprocessed results for '+user);
-            const ratingShift=50;
-            const ratingScale=7.5;
-            var dbInfo = config.shitdb.prod;
-            logger.info('Database is:'+dbInfo.database);
-            var knex = require('knex')({
-                client: dbInfo.client,
-                connection: {
-                    host : dbInfo.host,
-                user : dbInfo.user,
-                password : dbInfo.password,
-                database : dbInfo.database}
-            });
-            knex.on('query',function(query) {
-                sqlLogger.info(moment().format() + " Executed query: "+query.sql+" with bindings:"+query.bindings);
-            });
-            knex('users').where('name',user).first('id')
-                .then(function(uidRow) {
-                    if(!uidRow) {
-                        message.author.send("No user found with that name.");
-                        return null;
-                    } else  {
-                        return knex.from('ratingresults as rr')
-                    .join('users as u2','rr.opponent','=','u2.id')
-                    .join('users as u1','rr.user','=','u1.id')
-                    .join('gameresults as gr','gr.gameid','=','rr.gameid')
-                    .where('rr.ratingType', 0)
-                    .andWhere('rr.user',uidRow.id)
-                    //.andWhere('rr.processed',0)
-                    .select('u1.name', 'u2.name as opponent','rr.gameid','rr.score','gr.gameid','gr.gameresult','gr.pregame')
-                    .orderBy('gr.gameid','desc')
-                    .limit(10)
-                    .then(function(rows) {
-                        if(rows.length>0) {
-                            var paddingLength=rows.reduce(function(a,b) {return a.opponent.length > b.opponent.length ? a:b;}).opponent.length;
-                            var prevMsg='```'+String('ID').padStart(10)+'\t'+String('Opponent').padStart(paddingLength)+'\tResult\tKingdom\n';
-                            prevMsg+=String('—').repeat(10+6+43+paddingLength+(4*3))+'\n';
-                            for(row of rows) {
-                                //var gameResult=JSON.parse(row.gameresult);
-                                //console.log(gameResult.playerResults[0].ownedCards);
-                                var gameInfo=JSON.parse(row.pregame);
-                                if(gameInfo) {
-                                    kingdom=gameInfo.gameParameters.setupInstructions.kingdom.map(function(x) {
-                                        return nicify(x);});
-                                    kingdomCards=fullInfo.filter(function(x){return kingdom.includes(x.nicename)}).map(function(x) {
-                                        return x.name});
-                                }
-                                var result=(row.score==1) ? 'W' : (row.score==0.5) ? 'D' : 'L';
-                                prevMsg+=row.gameid.toString().padStart(10)+'\t'+row.opponent.padStart(paddingLength)+'\t'+result.padStart(6)+'\t'+kingdomCards.toString().substring(0,40)+'...\n';
-                            } 
-                            prevMsg+='```';
-                            message.channel.send(prevMsg);
-                        }
-                        else  {
-                            message.author.send("No games found.");
-                        }
-                    }).catch((err) => { logger.error( err); throw err })
+}
+if(msg.startsWith(prefix+'prior')) {
+    if(nicify(msg.replace(prefix+'prior',''))=='help') {
+        logger.info('Display help message for previous');
+        helpMsg='The "!prior" commands displays a brief summary of the previous 5 games for the indicated user, including game IDs and a comma-separated list of the kingdom cards (that can be pasted into the card selection window at Dominion Online).\n\nExample:```!prior crlundy```';
+        message.channel.send(helpMsg);
+    } else {
+        var user = msg.replace(prefix+'prior','').trim();
+        logger.info('Looking up unprocessed results for '+user);
+        const ratingShift=50;
+        const ratingScale=7.5;
+        knex('users').where('name',user).first('id')
+            .then(function(uidRow) {
+                if(!uidRow) {
+                    message.author.send("No user found with that name.");
+                    return null;
+                } else  {
+                    return knex.from('ratingresults as rr')
+                .join('users as u2','rr.opponent','=','u2.id')
+                .join('users as u1','rr.user','=','u1.id')
+                .join('gameresults as gr','gr.gameid','=','rr.gameid')
+                .where('rr.ratingType', 0)
+                .andWhere('rr.user',uidRow.id)
+                .select('u1.name', 'u2.name as opponent','rr.gameid','rr.score','gr.gameid','gr.gameresult','gr.pregame')
+                .orderBy('gr.gameid','desc')
+                .limit(5)
+                .then(function(rows) {
+                    if(rows.length>0) {
+                        var paddingLength=rows.reduce(function(a,b) {return a.opponent.length > b.opponent.length ? a:b;}).opponent.length;
+                        var prevMsg='';
+                        var prevTitle='Recent games';
+                        var games=[];
+                        for(row of rows) {
+                            var gameInfo=JSON.parse(row.pregame);
+                            if(gameInfo) {
+                                kingdom=gameInfo.gameParameters.setupInstructions.kingdom.map(function(x) {
+                                    return nicify(x);});
+                                kingdomCards=fullInfo.filter(function(x){return kingdom.includes(x.nicename)}).map(function(x) {
+                                    return x.name});
+                            }
+                            var result=(row.score==1) ? 'W' : (row.score==0.5) ? 'D' : 'L';
+                            games.push({gameid:row.gameid,opponent:row.opponent,result:result,kingdom:kingdomCards.join(', ')});
+                            //prevMsg+="**"+row.gameid.toString().padStart(10)+'**\t'+row.opponent+'\t'+"("+result+")"+'\t'+kingdomCards.toString().substring(0,60)+'...\n';
+                        } 
+                        message.channel.send({embed:{
+                            color: 3447003,
+                            title: prevTitle,
+                            //  description: prevMsg,
+                            fields:[{
+                                name:games[0].gameid + " v. *"+games[0].opponent+" ("+games[0].result+")*",
+                            value:games[0].kingdom},
+                            {name:games[1].gameid + " v. *"+games[1].opponent+" ("+games[1].result+")*",
+                                value:games[1].kingdom},
+                            {name:games[2].gameid + " v. *"+games[2].opponent+" ("+games[2].result+")*",
+                                value:games[2].kingdom},
+                            {name:games[3].gameid + " v. *"+games[3].opponent+" ("+games[3].result+")*",
+                                value:games[3].kingdom},
+                            {name:games[4].gameid + " v. *"+games[4].opponent+" ("+games[4].result+")*",
+                                value:games[4].kingdom}]}});
                     }
-                }).catch((err) => { logger.error(err); throw err })
-            .finally(() => {
-                knex.destroy();
-            });
-        }
+                    else  {
+                        message.author.send("No games found.");
+                    }
+                }).catch((err) => { logger.error( err); throw err })
+                }
+            }).catch((err) => { logger.error(err); throw err })
     }
+}
+if(msg.startsWith(prefix+'previous')) {
+    if(nicify(msg.replace(prefix+'previous',''))=='help') {
+        logger.info('Display help message for previous');
+        helpMsg='The "!previous" commands displays a brief summary of the previous 10 games, including game IDs.\n\nUsage: ```!previous <user>```\nExample:```!previous Cave-o-sapien```';
+        message.channel.send(helpMsg);
+    } else {
+        var user = msg.replace(prefix+'previous','').trim();
+        logger.info('Looking up unprocessed results for '+user);
+        const ratingShift=50;
+        const ratingScale=7.5;
+        knex('users').where('name',user).first('id')
+            .then(function(uidRow) {
+                if(!uidRow) {
+                    message.author.send("No user found with that name.");
+                    return null;
+                } else  {
+                    return knex.from('ratingresults as rr')
+                .join('users as u2','rr.opponent','=','u2.id')
+                .join('users as u1','rr.user','=','u1.id')
+                .join('gameresults as gr','gr.gameid','=','rr.gameid')
+                .where('rr.ratingType', 0)
+                .andWhere('rr.user',uidRow.id)
+                //.andWhere('rr.processed',0)
+                .select('u1.name', 'u2.name as opponent','rr.gameid','rr.score','gr.gameid','gr.gameresult','gr.pregame')
+                .orderBy('gr.gameid','desc')
+                .limit(10)
+                .then(function(rows) {
+                    if(rows.length>0) {
+                        var paddingLength=rows.reduce(function(a,b) {return a.opponent.length > b.opponent.length ? a:b;}).opponent.length;
+                        var prevMsg='```'+String('ID').padStart(10)+'\t'+String('Opponent').padStart(paddingLength)+'\tResult\tKingdom\n';
+                        prevMsg+=String('—').repeat(10+6+43+paddingLength+(4*3))+'\n';
+                        //     var prevTitle='Recent games';
+                        //     var prevMsg='';
+                        for(row of rows) {
+                            var gameInfo=JSON.parse(row.pregame);
+                            if(gameInfo) {
+                                kingdom=gameInfo.gameParameters.setupInstructions.kingdom.map(function(x) {
+                                    return nicify(x);});
+                                kingdomCards=fullInfo.filter(function(x){return kingdom.includes(x.nicename)}).map(function(x) {
+                                    return x.name});
+                            }
+                            var result=(row.score==1) ? 'W' : (row.score==0.5) ? 'D' : 'L';
+                            prevMsg+=row.gameid.toString().padStart(10)+'\t'+row.opponent.padStart(paddingLength)+'\t'+result.padStart(6)+'\t'+kingdomCards.toString().substring(0,40)+'...\n';
+                            //prevMsg+=row.gameid.toString().padStart(10)+'\t'+row.opponent+'\t'+"("+result+")"+'\t'+kingdomCards.toString().substring(0,40)+'...\n';
+                        } 
+                        prevMsg+='```';
+                        message.channel.send(prevMsg);
+                        //       message.channel.send({embed:{
+                        //         color: 0xFFFFFF,
+                        //         title: prevTitle,
+                        //         description: prevMsg,
+                        //            }});
+                    }
+                    else  {
+                        message.author.send("No games found.");
+                    }
+                }).catch((err) => { logger.error( err); throw err })
+                }
+            }).catch((err) => { logger.error(err); throw err })
+        //       .finally(() => {
+        //           knex.destroy();
+        //       });
+    }
+}
 
-    if(msg.startsWith(prefix+'text')) {
-        if(nicify(msg.replace(prefix+'text',''))=='help') {
-            logger.info('Display help message for text');
-            helpMsg='The "!text" command displays the basic card information and instructions.\n\nUsage: ```!text <card name>```\nExamples:```!text Expedition``````!text Page```';
-            message.channel.send(helpMsg);
-        } else {
-            var cardname=nicify(msg.replace(prefix+'text',''));
-            var info=fullInfo.filter(function(x) { return x.nicename==cardname})[0];
-            var cardText=info.text.replace("''(","*").replace(")''","*");
-            var color='14342874';
-            switch(info.type) {
-                case 'Project':
-                    color='14720397';
-                    break;
-                case 'Landmark':
-                    color='4289797';
-                    break;
-                case 'Event':
-                    color='10197915';
-                    break;
-                case 'Hex':
-                    color='12807124';
-                    break;
-                case 'Boon':
-                    color='16774256';
-                    break;
-                case 'State':
-                    color='1';
-                    break;
-                case 'Artifact':
-                    color='9131818';
-                    break;
-                default:
-                    color='14342874';
+if(msg.startsWith(prefix+'text')) {
+    if(nicify(msg.replace(prefix+'text',''))=='help') {
+        logger.info('Display help message for text');
+        helpMsg='The "!text" command displays the basic information and instructions found on the specified card-shaped thing. The bar is colored according to type (i.e. Card, Project, Event, Boon etc.).\n\nExamples:```!text Expedition``````!text Page```';
+        message.channel.send(helpMsg);
+    } else {
+        var cardname=nicify(msg.replace(prefix+'text',''));
+        var info=fullInfo.filter(function(x) { return x.nicename==cardname})[0];
+        var cardText=info.text.replace("''(","*").replace(")''","*");
+        var color='14342874';
+        switch(info.type) {
+            case 'Project':
+                color='14720397';
+                break;
+            case 'Landmark':
+                color='4289797';
+                break;
+            case 'Event':
+                color='10197915';
+                break;
+            case 'Hex':
+                color='12807124';
+                break;
+            case 'Boon':
+                color='16774256';
+                break;
+            case 'State':
+                color='1';
+                break;
+            case 'Artifact':
+                color='9131818';
+                break;
+            default:
+                color='14342874';
+        }
+        if(info) {
+            if(cardText.indexOf("---")>0) {
+                var aboveLine=cardText.split("---")[0];
+                var belowLine=cardText.split("---")[1];
+                message.channel.send({embed:{   
+                    color: color,
+                    title: info.name,
+                    //description: "*"+info.type+"*\n"+aboveLine,
+                    description: aboveLine,
+                    fields:[{name:"__                          __",value:belowLine}]}});
+                //fields:[{name:"———————————————————",value:belowLine}]}});
+    } else  {
+        message.channel.send({embed:{   
+            color: color,
+            title: info.name,
+            // description: "*"+info.type+"*\n"+info.text}});
+            description: cardText}});
             }
-            if(info) {
-                if(cardText.indexOf("---")>0) {
-                    var aboveLine=cardText.split("---")[0];
-                    var belowLine=cardText.split("---")[1];
-                    message.channel.send({embed:{   
-                        color: color,
-                        title: info.name,
-                        //description: "*"+info.type+"*\n"+aboveLine,
-                        description: aboveLine,
-                        fields:[{name:"__                          __",value:belowLine}]}});
-                    //fields:[{name:"———————————————————",value:belowLine}]}});
-        } else  {
-            message.channel.send({embed:{   
-                color: color,
-                title: info.name,
-                // description: "*"+info.type+"*\n"+info.text}});
-                description: cardText}});
-    }
 //Name: '+info.name+'\n'+info.text);
 logger.info('Sent card text for: '+cardname);
 }
@@ -537,7 +627,7 @@ logger.info('Sent card text for: '+cardname);
 if(msg.startsWith(prefix+'stats')) {
     if(nicify(msg.replace(prefix+'stats',''))=='help') {
         logger.info('Display help message for stats');
-        helpMsg='The "!stats" command shows the "markus stats" for the named card or card-shaped-thing.\n\nUsage: ```!stats <card name>```\nExamples:```!stats Expedition``````!stats Page```';
+        helpMsg='The "!stats" command shows the "markus stats" for the named card or card-shaped thing.\n\nExamples:```!stats Expedition``````!stats Page```';
         message.channel.send(helpMsg);
     } else {
         var cardname=nicify(msg.replace(prefix+'stats',''));
@@ -551,80 +641,16 @@ if(msg.startsWith(prefix+'stats')) {
     }
 }
 
-
-if(msg.startsWith(prefix+'silver')) {
-    var user = msg.replace(prefix+'silver','').trim();
-
-    var dbInfo = config.shitdb.prod;
-    logger.info('Database is:'+dbInfo.database);
-    var knex = require('knex')({
-        client: dbInfo.client,
-        connection: {
-            host : dbInfo.host,
-        user : dbInfo.user,
-        password : dbInfo.password,
-        database : dbInfo.database}
-    });
-
-    knex.on('query',function(query) {
-        sqlLogger.info(moment().format() + " Executed query: "+query.sql+" with bindings:"+query.bindings);
-    });
-    knex.from('gameresults')
-        .join('ratingresults','ratingresults.gameid','=','gameresults.gameid')
-        .join('users','users.id','=','ratingresults.user')
-        .where('users.name', user)
-        .select('gameresults.gameresult','users.id','gameresults.gameid').then(function(rows) {
-            if(rows.length>0) {
-                var silverCount=0;
-                for(row of rows) {
-                    var gameResults=JSON.parse(row.gameresult);
-                    if(gameResults) {
-                        var freq=gameResults.playerResults.filter(function(x) {return x.playerId.id==row.id})[0].ownedCards.frequencies;
-                        if(Object.keys(freq).length>0) {
-                            if(freq.SILVER) {
-                                logger.info('Looking for Silvers in game '+row.gameid+': found '+freq.SILVER);
-                                silverCount+=freq.SILVER;
-                            }
-                        }
-                    }
-                }
-                logger.info('Total Silvers: '+silverCount);
-                message.channel.send('Total silvers in deck at end of games: '+silverCount);
-            }
-            else  {
-                message.channel.send("No data found");
-            }
-        }).catch((err) => { logger.error( err); throw err })
-    .finally(() => {
-        knex.destroy();
-    });
-}
-
 if(msg.startsWith(prefix+'results')) {
     if(nicify(msg.replace(prefix+'results',''))=='help') {
         logger.info('Display help message for results');
-        helpMsg='The "!result" command lists the current, unprocessed 2-player results for the given player and an estimate of what that player\'s new µ, φ and rating will be based on those results.';
+        helpMsg='The "!results" command lists the current, unprocessed 2-player results for the given player and an estimate of what that player\'s new µ, φ and rating will be based on those results. The color bar indicates the performance of the player relative to expectation, from red (underperformed) to green (overperformed).\n\nExample:```!results Freaky```';
         message.channel.send(helpMsg);
     } else {
         var user = msg.replace(prefix+'results','').trim();
         logger.info('Looking up unprocessed results for '+user);
         const ratingShift=50;
         const ratingScale=7.5;
-        var dbInfo = config.shitdb.prod;
-        logger.info('Database is:'+dbInfo.database);
-        var knex = require('knex')({
-            client: dbInfo.client,
-            connection: {
-                host : dbInfo.host,
-            user : dbInfo.user,
-            password : dbInfo.password,
-            database : dbInfo.database}
-        });
-        knex.on('query',function(query) {
-            sqlLogger.info(moment().format() + " Executed query: "+query.sql+" with bindings:"+query.bindings);
-        });
-        // Grab data for most recent processed period of user
-        // What do we do if there is no rating history for a user?
 
         knex('users').where('name',user).first('id')
             .then(function(uidRow) {
@@ -663,21 +689,23 @@ if(msg.startsWith(prefix+'results')) {
                             var title='Won '+winSummary.wins+'/'+winSummary.played+', expected: '+winSummary.expected.toFixed(2)+'\n';
                             var currentMsg=(ratingScale*(userMu-2*userPhi)+ratingShift).toFixed(2)+'\tµ: '+userMu.toFixed(2).padStart(5)+'\tφ: '+userPhi.toFixed(2)+'\n'; 
                             var newMsg=(ratingScale*(newRating.mu-2*newRating.phi)+ratingShift).toFixed(2)+'\tµ: '+newRating.mu.toFixed(2).padStart(5)+'\tφ: '+newRating.phi.toFixed(2);
-                            if(winSummary.wins>winSummary.expected) {
-                                var winColor=parseInt(ratingGradient.rgbAt(0.95).toHex(),16);
-                            } else {
-                                var winColor=parseInt(ratingGradient.rgbAt(0.05).toHex(),16);
-                            }
-                                     message.channel.send({embed:{
-                                                         color: winColor,
-                                                         title: title,
-                                                           description: resultMsg,
-                                     fields:[{
-                                         name:"Current",
-                                     value:currentMsg},
-                                         {name:"New",
-                                     value:newMsg}]}});
-                           // message.channel.send(resultMsg);
+                            var performance=Math.max(Math.min(winSummary.wins-winSummary.expected,2),-2)/4 + 0.5;
+                            //if(winSummary.wins>winSummary.expected) {
+                            //    var winColor=parseInt(ratingGradient.rgbAt(0.95).toHex(),16);
+                            //} else {
+                            //    var winColor=parseInt(ratingGradient.rgbAt(0.05).toHex(),16);
+                            //}
+                            var winColor=parseInt(ratingGradient.rgbAt(performance).toHex(),16);
+                            message.channel.send({embed:{
+                                color: winColor,
+                                title: title,
+                                description: resultMsg,
+                                fields:[{
+                                    name:"Current",
+                                value:currentMsg},
+                                {name:"New",
+                                    value:newMsg}]}});
+                            // message.channel.send(resultMsg);
                         } else  {
                             message.author.send("No unprocessed results found.");
                         }
@@ -685,16 +713,16 @@ if(msg.startsWith(prefix+'results')) {
                     }
                 }).catch((err) => { logger.error( err); throw err })
             }).catch((err) => { logger.error(err); throw err })
-        .finally(() => {
-            knex.destroy();
-        });
+        //  .finally(() => {
+        //      knex.destroy();
+        //  });
     }
 }
 
 if(msg.startsWith(prefix+'chart')) {
     if(nicify(msg.replace(prefix+'chart',''))=='help') {
         logger.info('Display help message for chart');
-        helpMsg='The "!chart" command displays a line graph of the given player\'s skill (µ) and rating over time.';
+        helpMsg='The "!chart" command displays a line graph of the given player\'s skill (µ) and rating over time.\n\nExample:```!chart Cave-o-sapien```';
         message.channel.send(helpMsg);
     } else {
         var user = msg.replace(prefix+'chart','').trim();
@@ -702,74 +730,214 @@ if(msg.startsWith(prefix+'chart')) {
         const ratingShift=50;
         const ratingScale=7.5;
         logger.info('Generating rating chart for '+user);
-        var dbInfo = config.shitdb.prod;
-        var knex = require('knex')({
-            client: dbInfo.client,
-            connection: {
-                host : dbInfo.host,
-            user : dbInfo.user,
-            password : dbInfo.password,
-            database : dbInfo.database}
-        });
-        knex.on('query',sqlLogger.info);
-        knex.on('query',function(query) {
-            sqlLogger.info(moment().format() + " Executed query: "+query.sql+" with bindings:"+query.bindings);
-        });
         knex.from('users')
             .where('name',user)
             .first('id')
-        .then(function(uidRow) {
-            if(!uidRow) {
-                message.author.send("No user found with name '"+user+"'");
+            .then(function(uidRow) {
+                if(!uidRow) {
+                    message.author.send("No user found with name '"+user+"'");
+                    return null;
+                } else  {
+                    return knex.from('ratinghistory')
+                .where('ratingType',0)
+                .andWhere('user',uidRow.id)
+                .max('period as max')
+                .then(function(periodRow) {
+                    if(!periodRow) {
+                        message.author.send("No data found");
+                        return null;
+                    } else {
+                        logger.info(periodRow);
+                        var startPeriod=periodRow[0].max-180;
+                        logger.info('Start period is:'+startPeriod);
+                        return knex.from('ratinghistory as rh')
+                    .join('users as u','u.id','=','rh.user')
+                    .where('rh.user', uidRow.id)
+                    .andWhere('rh.ratingType', 0)
+                    .andWhere('rh.period','>',startPeriod)
+                    .orderBy('rh.period','desc')
+                    .select('u.name', 'rh.*')
+                    .then(function(rows) {
+                        if(rows.length>0) {
+                            var ratingChart=JSON.parse(ratingTemplate);
+                            ratingChart.title.text+=user;
+                            var ratingArray=[];
+                            for(row of rows) {
+                                var ratingCalc=ratingShift+ratingScale*(row.skill-2*row.deviation);
+                                var periodDate=periodToDate(ratingStartDate,row.period);
+                                ratingArray.push({period:periodDate,rating:ratingCalc,type:'rating'});
+                                ratingArray.push({period:periodDate,rating:row.skill*ratingScale+ratingShift,type:'skill'});
+                            } 
+                            ratingChart.data.push({name:'ratings',values:ratingArray});
+
+                            var view = new vega.View(vega.parse(ratingChart))
+                        .renderer('none')
+                        .initialize();
+
+                    view.toCanvas()
+                        .then(function(canvas) {
+                            fs.writeFile('/tmp/'+user+'_rating.png', canvas.toBuffer(),function(err) {
+                                if(!err) {
+                                    message.channel.send('',{files:['/tmp/'+user+'_rating.png']});
+                                } else {
+                                    logger.info('Error writing chart file for user '+user);
+                                } 
+                            })
+                        })
+                    .catch(function(err) { console.error(err); });
+                        } else  {
+                            message.author.send("No data found");
+                        }
+                    }).catch((err) => { logger.error( err); throw err })
+                    }
+                }).catch((err) => { logger.error( err); throw err })
+                }
+            }).catch((err) => { logger.error( err); throw err })
+    }
+}
+
+if(msg.startsWith(prefix+'rating')) {
+    if(nicify(msg.replace(prefix+'rating',''))=='help') {
+        logger.info('Display help message');
+        helpMsg='The "!rating" command displays the rating, skill (µ) and deviation (φ) of a given user or comma-separated list of users.\n\nExamples:```!rating Cave-o-sapien``````!rating Stef,tracer,RTT```';
+        message.channel.send(helpMsg);
+    } else {
+        var users = msg.replace(prefix+'rating','').split(",").map(function(x) {
+            return x.trim();});
+
+        const ratingShift=50;
+        const ratingScale=7.5;
+        logger.info('Looking up rating for '+users);
+
+        // Check rating cache for each user
+        var missingCount=0;
+        for(user of users) {
+            if(!ratingCache.has(nicify(user)))
+                missingCount++;
+        }
+        logger.info('Missing rating count:'+missingCount);
+
+        if(missingCount > 0) {
+            logger.info('Pulling ratings from database');
+            logger.info('Cache size: '+ratingCache.length);
+            knex.on('query',function(query) {
+                sqlLogger.info(moment().format() + " Executed query: "+query.sql+" with bindings:"+query.bindings);
+            });
+                var ratingQ = knex('ratinghistory').where('ratingType',0).max('period');
+            knex.from('ratinghistory')
+                .join('users','users.id','=','ratinghistory.user')
+                .whereIn('name', users)
+                .andWhere('ratingType', 0)
+                .andWhere('period',ratingQ)
+                .select('users.name', 'ratinghistory.*').orderByRaw('7.5*(skill-2*deviation) desc').then(function(rows) {
+                    if(rows.length>0) {
+                        logger.info('Found '+rows.length+' rows.');
+                        var resultMsg='';
+                        var paddingLength=rows.reduce(function(a,b) {return a.name.length > b.name.length ? a:b;}).name.length;
+                        logger.info('Padding length: '+paddingLength);
+                        for(row of rows) {
+                            if(row.period>currentPeriod) {
+                                logger.info('Updating current period from' +currentPeriod+' to ' +row.period);
+                                logger.info('Resetting cache.');
+                                currentPeriod=row.period;
+                                ratingCache.reset();
+                            }
+                            ratingCache.set(nicify(row.name),row);
+                            logger.info(row.name + " " +row.skill+ " " +row.period);
+                            var rating=ratingShift+ratingScale*(row.skill-2*row.deviation);
+                            resultMsg+=row.name.padStart(paddingLength,' ')+": "+rating.toFixed(2)+"\tµ: "+row.skill.toFixed(2).padStart(5)+"\tφ: "+row.deviation.toFixed(2)+"\n";
+                        } 
+                        logger.info('Results message:'+resultMsg);
+                        message.channel.send("```"+resultMsg+"```");
+                    } else  {
+                        // fail silently or return message?
+                        message.author.send("No data found");
+                    }
+                }).catch((err) => { logger.error( err); throw err })
+        } else {
+            logger.info('Pulling rating from cache');
+            logger.info('Cache size: '+ratingCache.length);
+            var resultMsg='';
+            var paddingLength=users.reduce(function(a,b) {return a.length>b.length ? a:b;}).length;
+            logger.info('Padding length: '+paddingLength);
+            var ratingResults = [];
+            for(user of users) {
+                var ratingInfo=ratingCache.get(nicify(user));
+                var rating=ratingShift+ratingScale*(ratingInfo.skill-2*ratingInfo.deviation);
+                ratingResults.push({name:ratingInfo.name,rating:rating,skill:ratingInfo.skill,deviation:ratingInfo.deviation});
+            }
+            ratingResults.sort(function(a,b) { return(a.rating > b.rating) ? -1 : (a.rating < b.rating) ? 1 : 0;});
+
+            for(ratingObj of ratingResults) {
+                resultMsg+=ratingObj.name.padStart(paddingLength,' ')+": "+ratingObj.rating.toFixed(2)+"\tµ: "+ratingObj.skill.toFixed(2).padStart(5)+"\tφ: "+ratingObj.deviation.toFixed(2)+"\n";
+            }
+            logger.info('Results message:'+resultMsg);
+            message.channel.send("```"+resultMsg+"```");
+        }
+    }
+}
+
+if(msg.startsWith(prefix+'versus')) {
+    if(nicify(msg.replace(prefix+'versus',''))=='help') {
+        logger.info('Display help message');
+        helpMsg='The "!versus" command displays the head-to-head results (rated 2-player games only) between two given players from the perspective of the first player in the list. The color bar represents the winning percentage, from red (bad) to green (good).\n\nExamples:```!versus Cave-o-sapien, Stef``````!versus Stef, Cave-o-sapien```';
+        message.channel.send(helpMsg);
+    } else {
+    var users = msg.replace(prefix+'versus','').split(",").map(function(x) {
+        return x.trim();});
+    // check for exactly 2 users
+    // Do we need to do subqeries here for performance reasons?
+    // Performance seems best using just name, despite lack of indexes
+    logger.info('Looking up head-to-head results for '+users);
+    knex('users').where('name',users[0]).first('id')
+        .then(function(user1Row) {
+            if(!user1Row) {
+                message.author.send("No user found with name '"+users[0]+"'");
                 return null;
             } else  {
-                return knex.from('ratinghistory')
-            .where('ratingType',0)
-            .andWhere('user',uidRow.id)
-            .max('period as max')
-            .then(function(periodRow) {
-                if(!periodRow) {
-                    message.author.send("No data found");
-                    return null;
+                return knex('users')
+            .where('name',users[1]).first('id')
+            .then(function(user2Row) {
+                if(!user2Row) {
+                    message.author.send("No user found with name '"+users[1]+"'");
                 } else {
-                    logger.info(periodRow);
-                    var startPeriod=periodRow[0].max-180;
-                    logger.info('Start period is:'+startPeriod);
-                    return knex.from('ratinghistory as rh')
-                .join('users as u','u.id','=','rh.user')
-                .where('rh.user', uidRow.id)
-                .andWhere('rh.ratingType', 0)
-                .andWhere('rh.period','>',startPeriod)
-                .orderBy('rh.period','desc')
-                .select('u.name', 'rh.*')
-                .then(function(rows) {
+                    return knex.from('ratingresults as rr')
+                .join('users as u1','rr.user','=','u1.id')
+                .join('users as u2','rr.opponent','=','u2.id')
+                .where('rr.ratingType', 0)
+                .andWhere('u1.id',user1Row.id)
+                .andWhere('u2.id',user2Row.id)
+                .select('u1.name as user','u2.name as opponent','rr.score')
+                .countDistinct('gameid as count')
+                .groupBy('u1.name','u2.name','rr.score').then(function(rows) {
                     if(rows.length>0) {
-                        var ratingChart=JSON.parse(ratingTemplate);
-                        ratingChart.title.text+=user;
-                        var ratingArray=[];
-                    for(row of rows) {
-                        var ratingCalc=ratingShift+ratingScale*(row.skill-2*row.deviation);
-                        var periodDate=periodToDate(ratingStartDate,row.period);
-                        ratingArray.push({period:periodDate,rating:ratingCalc,type:'rating'});
-                        ratingArray.push({period:periodDate,rating:row.skill*ratingScale+ratingShift,type:'skill'});
-                    } 
-                    ratingChart.data.push({name:'ratings',values:ratingArray});
-
-                    var view = new vega.View(vega.parse(ratingChart))
-                    .renderer('none')
-                    .initialize();
-
-                view.toCanvas()
-                    .then(function(canvas) {
-                        fs.writeFile('/tmp/'+user+'_rating.png', canvas.toBuffer(),function(err) {
-                            if(!err) {
-                                message.channel.send('',{files:['/tmp/'+user+'_rating.png']});
+                        var wins=[0,0,0];
+                        var player1=rows[0].user;
+                        var player2=rows[0].opponent;
+                        for(row of rows) {
+                            if(row.score==0.5) {
+                                wins[2]+=row.count;
+                                logger.info(row.user+" "+row.opponent+" "+row.count+" "+row.score);
                             } else {
-                                logger.info('Error writing chart file for user '+user);
-                            } 
-                        })
-                    })
-                .catch(function(err) { console.error(err); });
+                                wins[0]+=(row.count*row.score);
+                                wins[1]+=(row.count*(1-row.score));
+                                logger.info(row.user+" "+row.opponent+" "+row.count+" "+row.score);
+                            }
+                        }
+                        logger.info('Results: '+wins[0]+"-"+wins[1]+"-"+wins[2]);
+                        if(wins[2]>0) {
+                            var winColor=parseInt(ratingGradient.rgbAt((wins[0]+0.5*wins[2])/(wins[0]+wins[1]+wins[2])).toHex(),16);
+                            message.channel.send({embed:{
+                                color: winColor,
+                                title: player1+' v. '+player2 + " (W–L–D)",
+                                description: wins[0]+'–'+wins[1]+'–'+wins[2]}});
+                        } else {
+                            var winColor=parseInt(ratingGradient.rgbAt(wins[0]/(wins[0]+wins[1])).toHex(),16);
+                            message.channel.send({embed:{
+                                color: winColor,
+                                title: player1+' v. '+player2 +" (W–L)",
+                                description: wins[0]+'–'+wins[1]}});
+                        }
                     } else  {
                         message.author.send("No data found");
                     }
@@ -778,186 +946,7 @@ if(msg.startsWith(prefix+'chart')) {
             }).catch((err) => { logger.error( err); throw err })
             }
         }).catch((err) => { logger.error( err); throw err })
-        .finally(() => {
-            knex.destroy();
-        });
     }
-}
-
-if(msg.startsWith(prefix+'rating')) {
-    var users = msg.replace(prefix+'rating','').split(",").map(function(x) {
-        return x.trim();});
-
-    const ratingShift=50;
-    const ratingScale=7.5;
-    logger.info('Looking up rating for '+users);
-
-    // Check rating cache for each user
-    var missingCount=0;
-    for(user of users) {
-        if(!ratingCache.has(nicify(user)))
-            missingCount++;
-    }
-
-    logger.info('Missing rating count:'+missingCount);
-
-    if(missingCount > 0) {
-        logger.info('Pulling ratings from database');
-        logger.info('Cache size: '+ratingCache.length);
-        var dbInfo = config.shitdb.prod;
-        logger.info('Database is:'+dbInfo.database);
-        var knex = require('knex')({
-            client: dbInfo.client,
-            connection: {
-                host : dbInfo.host,
-            user : dbInfo.user,
-            password : dbInfo.password,
-            database : dbInfo.database}
-        });
-
-        //knex.on('query',sqlLogger.info);
-        knex.on('query',function(query) {
-            sqlLogger.info(moment().format() + " Executed query: "+query.sql+" with bindings:"+query.bindings);
-        });
-        var ratingQ = knex('ratinghistory').where('ratingType',0).max('period');
-        knex.from('ratinghistory')
-            .join('users','users.id','=','ratinghistory.user')
-            .whereIn('name', users)
-            .andWhere('ratingType', 0)
-            .andWhere('period',ratingQ)
-            .select('users.name', 'ratinghistory.*').orderByRaw('7.5*(skill-2*deviation) desc').then(function(rows) {
-                if(rows.length>0) {
-                    logger.info('Found '+rows.length+' rows.');
-                    var resultMsg='';
-                    var paddingLength=rows.reduce(function(a,b) {return a.name.length > b.name.length ? a:b;}).name.length;
-                    logger.info('Padding length: '+paddingLength);
-                    for(row of rows) {
-                        if(row.period>currentPeriod) {
-                            logger.info('Updating current period from' +currentPeriod+' to ' +row.period);
-                            logger.info('Resetting cache.');
-                            currentPeriod=row.period;
-                            ratingCache.reset();
-                        }
-                        ratingCache.set(nicify(row.name),row);
-                        logger.info(row.name + " " +row.skill+ " " +row.period);
-                        var rating=ratingShift+ratingScale*(row.skill-2*row.deviation);
-                        resultMsg+=row.name.padStart(paddingLength,' ')+": "+rating.toFixed(2)+"\tµ: "+row.skill.toFixed(2).padStart(5)+"\tφ: "+row.deviation.toFixed(2)+"\n";
-                    } 
-                    logger.info('Results message:'+resultMsg);
-                    message.channel.send("```"+resultMsg+"```");
-                } else  {
-                    // fail silently or return message?
-                    message.channel.send("No data found");
-                }
-            }).catch((err) => { logger.error( err); throw err })
-        .finally(() => {
-            knex.destroy();
-        });
-    } else {
-        // Go directly from cache
-        // Need to sort these!
-        logger.info('Pulling rating from cache');
-        logger.info('Cache size: '+ratingCache.length);
-        var resultMsg='';
-        var paddingLength=users.reduce(function(a,b) {return a.length>b.length ? a:b;}).length;
-        logger.info('Padding length: '+paddingLength);
-        var ratingResults = [];
-        for(user of users) {
-            var ratingInfo=ratingCache.get(nicify(user));
-            var rating=ratingShift+ratingScale*(ratingInfo.skill-2*ratingInfo.deviation);
-            ratingResults.push({name:ratingInfo.name,rating:rating,skill:ratingInfo.skill,deviation:ratingInfo.deviation});
-        }
-        ratingResults.sort(function(a,b) { return(a.rating > b.rating) ? -1 : (a.rating < b.rating) ? 1 : 0;});
-
-        for(ratingObj of ratingResults) {
-            resultMsg+=ratingObj.name.padStart(paddingLength,' ')+": "+ratingObj.rating.toFixed(2)+"\tµ: "+ratingObj.skill.toFixed(2).padStart(5)+"\tφ: "+ratingObj.deviation.toFixed(2)+"\n";
-        }
-        logger.info('Results message:'+resultMsg);
-        message.channel.send("```"+resultMsg+"```");
-    }
-}
-
-if(msg.startsWith(prefix+'versus')) {
-    var users = msg.replace(prefix+'versus','').split(",").map(function(x) {
-        return x.trim();});
-    // check for exactly 2 users
-    // Do we need to do subqeries here for performance reasons?
-    // Performance seems best using just name, despite lack of indexes
-    logger.info('Looking up head-to-head results for '+users);
-    var dbInfo = config.shitdb.prod;
-    var knex = require('knex')({
-        client: dbInfo.client,
-        connection: {
-            host : dbInfo.host,
-        user : dbInfo.user,
-        password : dbInfo.password,
-        database : dbInfo.database}
-    });
-    //knex.on('query',sqlLogger.info);
-    knex.on('query',function(query) {
-        sqlLogger.info(moment().format() + " Executed query: "+query.sql+" with bindings:"+query.bindings);
-    });
-
-    knex('users').where('name',users[0]).first('id')
-        .then(function(user1Row) {
-            if(!user1Row) {
-                message.author.send("No user found with name '"+users[0]+"'");
-                return null;
-            } else  {
-                return knex('users')
-                    .where('name',users[1]).first('id')
-                    .then(function(user2Row) {
-                        if(!user2Row) {
-                            message.author.send("No user found with name '"+users[1]+"'");
-                        } else {
-                            return knex.from('ratingresults as rr')
-                        .join('users as u1','rr.user','=','u1.id')
-                       .join('users as u2','rr.opponent','=','u2.id')
-                        .where('rr.ratingType', 0)
-                        .andWhere('u1.id',user1Row.id)
-                        .andWhere('u2.id',user2Row.id)
-                        .select('u1.name as user','u2.name as opponent','rr.score')
-                        .countDistinct('gameid as count')
-                        .groupBy('u1.name','u2.name','rr.score').then(function(rows) {
-                            if(rows.length>0) {
-                                var wins=[0,0,0];
-                                var player1=rows[0].user;
-                                var player2=rows[0].opponent;
-                                for(row of rows) {
-                                    if(row.score==0.5) {
-                                        wins[2]+=row.count;
-                                        logger.info(row.user+" "+row.opponent+" "+row.count+" "+row.score);
-                                    } else {
-                                        wins[0]+=(row.count*row.score);
-                                        wins[1]+=(row.count*(1-row.score));
-                                        logger.info(row.user+" "+row.opponent+" "+row.count+" "+row.score);
-                                    }
-                                }
-                                logger.info('Results: '+wins[0]+"-"+wins[1]+"-"+wins[2]);
-                                if(wins[2]>0) {
-                                    var winColor=parseInt(ratingGradient.rgbAt((wins[0]+0.5*wins[2])/(wins[0]+wins[1]+wins[2])).toHex(),16);
-                                     message.channel.send({embed:{
-                                                         color: winColor,
-                                                         title: player1+' v. '+player2 + " (W–L–D)",
-                                                           description: wins[0]+'–'+wins[1]+'–'+wins[2]}});
-                                } else {
-                                    var winColor=parseInt(ratingGradient.rgbAt(wins[0]/(wins[0]+wins[1])).toHex(),16);
-                                     message.channel.send({embed:{
-                                                         color: winColor,
-                                                         title: player1+' v. '+player2 +" (W–L)",
-                                                           description: wins[0]+'–'+wins[1]}});
-                                }
-                            } else  {
-                                message.author.send("No data found");
-                            }
-                        }).catch((err) => { logger.error( err); throw err })
-                        }
-                    }).catch((err) => { logger.error( err); throw err })
-            }
-        }).catch((err) => { logger.error( err); throw err })
-    .finally(() => {
-        knex.destroy();
-    });
 }
 // show someone their peers on the leaderboard
 if(msg.startsWith(prefix+'peers')) {
@@ -966,7 +955,7 @@ if(msg.startsWith(prefix+'peers')) {
 
     if(nicify(msg.replace(prefix+'peers',''))=='help') {
         logger.info('Display help message');
-        helpMsg='The "!peers" command displays the rating and leaderboard position of a given user and those of the 10 people bracketing them on the Shuffle iT leaderboard.\n\nUsage: ```!peers <user>```Example:```!peers Cave-o-sapien```';
+        helpMsg='The "!peers" command displays the rating and leaderboard position of a given user and those of the 10 people bracketing them on the Shuffle iT leaderboard.\n\nExample:```!peers Cave-o-sapien```';
         message.channel.send(helpMsg);
     } else {
         var user=nicify(msg.replace(prefix+'peers',''));
@@ -976,20 +965,21 @@ if(msg.startsWith(prefix+'peers')) {
 
         // Check leader cache for rating leaderboard
         if(!leaderCache.has(sortBy)) {
-            var dbInfo = config.shitdb.prod;
-            logger.info('Database is:'+dbInfo.database);
-            var knex = require('knex')({
-                client: dbInfo.client,
-                connection: {
-                    host : dbInfo.host,
-                user : dbInfo.user,
-                password : dbInfo.password,
-                database : dbInfo.database}
-            });
-            knex.on('query',function(query) {
-                sqlLogger.info(moment().format() + " Executed query: "+query.sql+" with bindings:"+query.bindings);
-            });
-
+            /*
+               var dbInfo = config.shitdb.prod;
+               logger.info('Database is:'+dbInfo.database);
+               var knex = require('knex')({
+               client: dbInfo.client,
+               connection: {
+               host : dbInfo.host,
+               user : dbInfo.user,
+               password : dbInfo.password,
+               database : dbInfo.database}
+               });
+               knex.on('query',function(query) {
+               sqlLogger.info(moment().format() + " Executed query: "+query.sql+" with bindings:"+query.bindings);
+               });
+               */
             var leaderQ = knex('ratinghistory').where('ratingType',0).max('period');
             knex.from('ratinghistory')
                 .join('users','users.id','=','ratinghistory.user')
@@ -1005,7 +995,7 @@ if(msg.startsWith(prefix+'peers')) {
                             var topPeer=Math.max(userIndex-5,0);
                             var bottomPeer=Math.min(userIndex+6,rows.length);
                             logger.info('User position on leaderboard is:'+userIndex);
-                            var peerMsg="Shuffle iT peers ("+sortBy+",period "+period+")\n---------------------------------------------------\n"; 
+                            var peerMsg="Shuffle iT peers ("+sortBy+",period "+period+")\n——————————————————————————————————————————\n"; 
                             var paddingLength=rows.slice(topPeer,bottomPeer).reduce(function(a,b) {return a.name.length > b.name.length ? a:b;}).name.length;
                             for(i=topPeer; i<bottomPeer; i++) {
                                 logger.info(rows[i].name + " " +rows[i].skill+ " " +rows[i].period);
@@ -1022,7 +1012,7 @@ if(msg.startsWith(prefix+'peers')) {
                         message.author.send("No data found");
                     }
                 }).catch((err) => { logger.error( err); throw err })
-            .finally(() => { knex.destroy();});
+            //     .finally(() => { knex.destroy();});
         } else {
             logger.info('Pulling cached leaderboard for '+sortBy);
             var rows=leaderCache.get(sortBy);
@@ -1031,7 +1021,7 @@ if(msg.startsWith(prefix+'peers')) {
             if(userIndex>=0) {
                 var topPeer=Math.max(userIndex-5,0);
                 var bottomPeer=Math.min(userIndex+6,rows.length);
-                var peerMsg="Shuffle iT peers ("+sortBy+",period "+period+")\n---------------------------------------------------\n"; 
+                var peerMsg="Shuffle iT peers ("+sortBy+",period "+period+")\n——————————————————————————————————————————\n"; 
                 var paddingLength=rows.slice(topPeer,bottomPeer).reduce(function(a,b) {return a.name.length > b.name.length ? a:b;}).name.length;
                 for(i=topPeer; i<bottomPeer; i++) {
                     logger.info(rows[i].name + " " +rows[i].skill+ " " +rows[i].period);
@@ -1054,7 +1044,7 @@ if(msg.startsWith(prefix+'leader')) {
 
     if(nicify(msg.replace(prefix+'leader',''))=='help') {
         logger.info('Display help message');
-        helpMsg='The "!leader" command displays the top N of the Shuffle iT leaderboard. By default N=10 and the leaderboard is sorted by rating. Max N is 25 due to message size restrictions. To see where a particular user is on the leaderboard, try the ```peers``` command. The leaderboard can optionally be sorted by skill (µ) by including "µ" or "skill" after the command.\n\nUsage: ```!leader```Example:```!leader20 mu```';
+        helpMsg='The "!leader" command displays the top N of the Shuffle iT leaderboard. By default N=10 and the leaderboard is sorted by rating. Max N is 25 due to message size restrictions. To see where a particular user is on the leaderboard, try the "!peers" command. The leaderboard can optionally be sorted by skill (µ) by including "µ" or "skill" after the command.\n\nExamples: ```!leader``````!leader20 mu```';
         message.channel.send(helpMsg);
     } else {
 
@@ -1076,20 +1066,6 @@ if(msg.startsWith(prefix+'leader')) {
         if(topN>25) topN=25;
         // Check leader cache for rating leaderboard
         if(!leaderCache.has(sortBy)) {
-            var dbInfo = config.shitdb.prod;
-            logger.info('Database is:'+dbInfo.database);
-            var knex = require('knex')({
-                client: dbInfo.client,
-                connection: {
-                    host : dbInfo.host,
-                user : dbInfo.user,
-                password : dbInfo.password,
-                database : dbInfo.database}
-            });
-            knex.on('query',function(query) {
-                sqlLogger.info(moment().format() + " Executed query: "+query.sql+" with bindings:"+query.bindings);
-            });
-
             var leaderQ = knex('ratinghistory').where('ratingType',0).max('period');
             knex.from('ratinghistory')
                 .join('users','users.id','=','ratinghistory.user')
@@ -1101,7 +1077,7 @@ if(msg.startsWith(prefix+'leader')) {
                         leaderCache.set(sortBy,rows);
                         var j=0;
                         var period=rows[0].period;
-                        var leaderMsg="Shuffle iT Top "+topN+" ("+sortBy+",period "+period+")\n---------------------------------------------\n"; 
+                        var leaderMsg="Shuffle iT Top "+topN+" ("+sortBy+", "+periodToDate(ratingStartDate,period).toLocaleDateString()+")\n————————————————————————————————————————————\n"; 
                         console.log(rows.slice(0,topN)[0].name);
                         console.log(rows.slice(0,topN)[0].name.length);
                         var paddingLength=rows.slice(0,topN).reduce(function(a,b) {return a.name.length > b.name.length ? a:b;}).name.length;
@@ -1114,15 +1090,16 @@ if(msg.startsWith(prefix+'leader')) {
                         message.channel.send("```"+leaderMsg+"```");
                     } else  {
                         // fail silently or return message?
-                        message.channel.send("No data found");
+                        message.author.send("No data found");
                     }
                 }).catch((err) => { logger.error( err); throw err })
-            .finally(() => { knex.destroy();});
+            //.finally(() => { knex.destroy();});
         } else {
             logger.info('Pulling cached leaderboard for '+sortBy);
-            var leaderMsg="Shuffle iT Top "+topN+" ("+sortBy+",period "+period+")\n---------------------------------------------\n"; 
             var rows=leaderCache.get(sortBy);
             var period=rows[0].period;
+            var leaderMsg="Shuffle iT Top "+topN+" ("+sortBy+", "+periodToDate(ratingStartDate,period).toLocaleDateString()+")\n————————————————————————————————————————————\n"; 
+            console.log(period);
             var paddingLength=rows.slice(0,topN).reduce(function(a,b) {return a.name.length > b.name.length ? a:b;}).name.length;
             for(i=0; i<topN; i++) {
                 logger.info(rows[i].name + " " +rows[i].skill+ " " +rows[i].period);
@@ -1140,7 +1117,7 @@ if(msg.startsWith(prefix+'history')) {
 
     if(nicify(msg.replace(prefix+'history',''))=='help') {
         logger.info('Display help message');
-        helpMsg='The "!history" command displays some of Donald X’s design notes (aka "Secret History") for a given card or *card-shaped thing*.\n\nUsage: ```!history <card name>```Example:```!history Secret Chamber```\nTo conserve channel space, the text is rendered as an image. For some of the longer histories, you may need to open the image in your browser.';
+        helpMsg='The "!history" command displays some of Donald X.’s design notes (aka "Secret History") for a given card or card-shaped thing.\n\nExamples:```!history Secret Chamber``````!history Expedition```\nTo conserve channel space, the text is rendered as an image. For some of the longer histories, you may need to open the image in your browser.';
         message.channel.send(helpMsg);
     } else {
         logger.info('Secret history command invoked');
@@ -1185,7 +1162,7 @@ if(msg.startsWith(prefix+'history')) {
 // Display formatted kingdom image
 if(msg.startsWith(prefix+'kingdom')) {
     if(nicify(msg.replace(prefix+'kingdom',''))=='help') {
-        helpMsg='The "!kingdom" command displays a kingdom image based on a comma-separated list of cards, events and landmarks. It requires at least 10 unique cards. If a Looter is included but no specific Ruin is specified, one will be randomly chosen and included. Likewise, if the list includes "Knights" but no named Knight, then one will be randomly chosen. The Young Witch bane can be indicated by a "(b)" after the desired bane card name. No bane will be automatically included (at this time).\n\nExample: ```!kingdom knights,artificer,market,tomb,bonfire,urchin,relic,death cart,vampire,bandit camp,dungeon(b),young witch,werewolf```';
+        helpMsg='The "!kingdom" command displays a kingdom image based on *either* a Shuffle iT game ID or comma-separated list of cards, events and landmarks. For the CSV-list version, it requires at least 10 unique cards. If a Looter is included but no specific Ruin is specified, one will be randomly chosen and included. Likewise, if the list includes "Knights" but no named Knight, then one will be randomly chosen. The Young Witch Bane can be indicated by a "(b)" after the desired Bane card name. No Bane will be automatically included (at this time). If either Colony or Platinum is included in the list, both will be displayed.\n\nExample: ```!kingdom knights,artificer,market,tomb,bonfire,urchin,relic,death cart,vampire,bandit camp,dungeon(b),young witch,werewolf``````!kingdom 21278249```';
         message.channel.send(helpMsg);
     } else {
         getKingdom(null,msg.replace(prefix+'kingdom',''),drawKingdom,function(err,filename) {
