@@ -3,5 +3,6 @@ images/templates
 images/markus_stats
 images/art
 config.json
+config.js
 dombot.log
 logs/
