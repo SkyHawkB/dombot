@@ -6,11 +6,14 @@ const fs = require('fs');
 const stream = require('stream');
 const config = require('./config');
 const tinygradient = require('tinygradient');
+//const cardFile=fs.readFileSync("all_cards.json");
 const historyFile=fs.readFileSync("secret_all.json");
+//const artistFile=fs.readFileSync("artists.json");
 const completeFile=fs.readFileSync("dominion.cards.json");
 const request=require("request");
 const winston=require('winston');
 const async=require('async');
+//const knex=require('knex');
 const vega=require('vega');
 const LRU=require('lru-cache');
 const glicko=require('./glicko');
@@ -408,7 +411,24 @@ bot.on('ready', function (evt) {
             {name:'More info',
                 value:'Each of these commands also works in a direct message to the bot.\nMore information for each command available by appending the word \'help\' to that command: e.g.```!kingdom help```'}]}});
     }
+if(msg.startsWith(prefix+'status')) {
+    var commandText='';
+    for(var cmd in commandCounts) {
+        if(commandCounts.hasOwnProperty(cmd)){
+            commandText+=cmd+': '+commandCounts[cmd]+"\n";
+        }
+    }
+    message.channel.send({embed:{
+        color: 3447003,
+        title: "Dombot Status",
+        fields:[{
+            name:"Command Counts",
+        value:commandText},
+        {
+            name:"Cache Sizes",
+        value:"Leader cache: "+leaderCache.length+"\nRating cache: "+ratingCache.length}]}});
 
+}
     if(msg.startsWith(prefix+'art')) {
         if(nicify(msg.replace(prefix+'art',''))=='help') {
             logger.info('Display help message for art');
@@ -965,15 +985,13 @@ if(msg.startsWith(prefix+'versus')) {
                                 message.channel.send({embed:{
                                     color: winColor,
                                     title: player1+' v. '+player2 + " (W–L–D)",
-                                    //description: wins[0]+'–'+wins[1]+'–'+wins[2]+'\nExpected wins: '+expected.toFixed(2)}});
-                                    description: wins[0]+'–'+wins[1]+'–'+wins[2]}});
+                                    description: wins[0]+'–'+wins[1]+'–'+wins[2]+'\nExpected wins: '+expected.toFixed(2)}});
                             } else {
                                 var winColor=parseInt(ratingGradient.rgbAt(wins[0]/(wins[0]+wins[1])).toHex(),16);
                                 message.channel.send({embed:{
                                     color: winColor,
                                     title: player1+' v. '+player2 +" (W–L)",
-                                    //description: wins[0]+'–'+wins[1]+'\nExpected wins: '+expected.toFixed(2)}});
-                                    description: wins[0]+'–'+wins[1]}});
+                                    description: wins[0]+'–'+wins[1]+'\nExpected wins: '+expected.toFixed(2)}});
                             }
                         } else  {
                             message.author.send("No data found");
