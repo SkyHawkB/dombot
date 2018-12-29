@@ -35,6 +35,19 @@ const sqlLogger = winston.createLogger({
       exitOnError: false,
 });
 
+
+commandCounts = {'rating':0,'versus':0,
+    'kingdom':0,
+    'history':0,
+    'results':0,
+    'leader':0,
+    'peers':0,
+    'chart':0,
+    'prior':0,
+    'text':0,
+    'stats':0,
+    'art':0};
+
 // Connect to DB, setup pool
 var dbInfo = config.shitdb.prod;
 logger.info('Database is:'+dbInfo.database);
@@ -52,7 +65,7 @@ knex.on('query',function(query) {
 
 // Set max age of cache to 30 minutes
 var ratingCache=LRU({max:2000,maxAge:30*1000*60});
-var leaderCache=LRU({max:3000,maxAge:60*1000*60});
+var leaderCache=LRU({max:30000,maxAge:60*1000*60});
 var currentPeriod=0;
 
 //var cardList=JSON.parse(cardFile);
@@ -63,6 +76,11 @@ var ratingGradient=tinygradient('red','white','green');
 
 const bot = new Discord.Client();
 const ratingStartDate = new Date('01-JAN-2017');
+
+function logCommand(command) {
+    commandCounts[command]++;
+    logger.info('Command !'+command+' called '+commandCounts[command]+' times.');
+}
 
 function periodToDate(startDate, period) {
     var tempDate=new Date(startDate);
@@ -374,8 +392,7 @@ function drawKingdom(err, kingdom, msgCallback) {
 
 bot.on('ready', function (evt) {
     logger.info('Connected');
-    logger.info('Logged in as: ');
-    logger.info(bot.username + ' - (' + bot.id + ')');
+    logger.info('Logged in as: '+bot.user.username + ' - (' + bot.user.id + ')');
         });
     bot.on('message', message => {
         var prefix='!'
@@ -393,51 +410,61 @@ bot.on('ready', function (evt) {
                 value:'**!kingdom** generate kingdom image from game ID or CSV list\n**!rating** player rating\n**!leader** current leaderboard\n**!peers** players with similar rank\n**!chart** longitudinal rating chart\n**!versus** head-to-head results for two players\n**!results** unprocessed game results\n**!prior** summary of prior five games'},
             {name:'More info',
                 value:'Each of these commands also works in a direct message to the bot.\nMore information for each command available by appending the word \'help\' to that command: e.g.```!kingdom help```'}]}});
-    /*
-       var helpMsg="Available commands:\n———————————————————————————————————————————\n";
-       helpMsg+="**!kingdom** - generate kingdom image\n";
-       helpMsg+="**!history** - display secret history for a card\n";
-       helpMsg+="**!rating** - Shuffle iT rating for player(s)\n";
-       helpMsg+="**!results** - summary of unprocessed results for player\n";
-       helpMsg+="**!leader** - displays top of Shuffle iT leaderboard\n";
-       helpMsg+="**!peers** - for a given player, shows players +/- 5 leaderboard spots (if possible)\n";
-       helpMsg+="**!chart** - show rating/skill in a chart\n";
-       helpMsg+="**!previous** - shows previous N rated games\n";
-       helpMsg+="**!versus** - display head-to-head record for two players\n";
-       helpMsg+="**!art** - shows art for card/box/card-shaped thing\n";
-       helpMsg+="**!text** - shows text for card/card-shaped thing\n";
-       helpMsg+="**!stats** - show the 'markus stats' for a card\n";
-       helpMsg+="\nFor more detailed help, type the command followed by 'help'";
-       helpMsg+="\n\nEach of these commands also works in a Direct Message to the bot. This allows you to avoid spamming a channel if you wish.";
-       message.channel.send(helpMsg);
-       */
     }
-
-if(msg.startsWith(prefix+'art')) {
-    if(nicify(msg.replace(prefix+'art',''))=='help') {
-        logger.info('Display help message for art');
-        helpMsg='The "!art" command shows the original, frameless art for the specified card-shaped thing or set.\n\nExamples:```!art Expedition``````!art Page``````!art Dominion```';
-        message.channel.send(helpMsg);
-    } else {
-        var cardname=nicify(msg.replace(prefix+'art',''));
-        logger.info('Looking for art for '+cardname);
-        cardartFile = "./images/art/"+cardname+".jpg";
-
-        var illustrator=fullInfo.filter(function(x) { return x.nicename==cardname})[0].artist;
-        logger.info('Illustrator: '+illustrator);
-
-        if(fs.existsSync(cardartFile)) {
-            message.channel.send('*Illustrator: '+illustrator+'*', {files:[cardartFile]});
-            logger.info('Sent card art for: '+cardname);
+if(msg.startsWith(prefix+'status')) {
+    var commandText='';
+    for(var cmd in commandCounts) {
+        if(commandCounts.hasOwnProperty(cmd)){
+            commandText+=cmd+': '+commandCounts[cmd]+"\n";
         }
     }
+    message.channel.send({embed:{
+        color: 3447003,
+        title: "Dombot Status",
+        fields:[{
+            name:"Command Counts",
+        value:commandText},
+        {
+            name:"Cache Sizes",
+        value:"Leader cache: "+leaderCache.length+"\nRating cache: "+ratingCache.length}]}});
+
 }
+    if(msg.startsWith(prefix+'art')) {
+        if(nicify(msg.replace(prefix+'art',''))=='help') {
+            logger.info('Display help message for art');
+            helpMsg='The "!art" command shows the original, frameless art for the specified card-shaped thing or set.\n\nExamples:```!art Expedition``````!art Page``````!art Dominion```';
+            message.channel.send(helpMsg);
+        } else {
+            logCommand('art');
+            var cardname=nicify(msg.replace(prefix+'art',''));
+            logger.info('Looking for art for '+cardname);
+            cardartFile = "./images/art/"+cardname+".jpg";
+
+            var illustratorArray=fullInfo.filter(function(x) { return x.nicename==cardname});
+            if(illustratorArray.length==0) {
+                message.author.send("'"+cardname+"' is not a card I recognize.");
+            } else {
+                var illustrator=illustratorArray[0].artist;
+                logger.info('Illustrator: '+illustrator);
+                fs.access(cardartFile, fs.F_OK, (err) => {
+                    if(err) {
+                        logger.info('File not found: '+cardartFile);
+                        message.author.send('No art found for '+cardname);
+                    } else {
+                        message.channel.send('*Illustrator: '+illustrator+'*', {files:[cardartFile]});
+                        logger.info('Sent card art for: '+cardname);
+                    }
+                });
+            }
+        }
+    }
 if(msg.startsWith(prefix+'prior')) {
     if(nicify(msg.replace(prefix+'prior',''))=='help') {
         logger.info('Display help message for previous');
         helpMsg='The "!prior" commands displays a brief summary of the previous 5 games for the indicated user, including game IDs and a comma-separated list of the kingdom cards (that can be pasted into the card selection window at Dominion Online).\n\nExample:```!prior crlundy```';
         message.channel.send(helpMsg);
     } else {
+        logCommand('prior');
         var user = msg.replace(prefix+'prior','').trim();
         logger.info('Looking up unprocessed results for '+user);
         const ratingShift=50;
@@ -558,9 +585,6 @@ if(msg.startsWith(prefix+'previous')) {
                 }).catch((err) => { logger.error( err); throw err })
                 }
             }).catch((err) => { logger.error(err); throw err })
-        //       .finally(() => {
-        //           knex.destroy();
-        //       });
     }
 }
 
@@ -570,6 +594,7 @@ if(msg.startsWith(prefix+'text')) {
         helpMsg='The "!text" command displays the basic information and instructions found on the specified card-shaped thing. The bar is colored according to type (i.e. Card, Project, Event, Boon etc.).\n\nExamples:```!text Expedition``````!text Page```';
         message.channel.send(helpMsg);
     } else {
+        logCommand('text');
         var cardname=nicify(msg.replace(prefix+'text',''));
         var info=fullInfo.filter(function(x) { return x.nicename==cardname})[0];
         var cardText=info.text.replace("''(","*").replace(")''","*");
@@ -630,14 +655,19 @@ if(msg.startsWith(prefix+'stats')) {
         helpMsg='The "!stats" command shows the "markus stats" for the named card or card-shaped thing.\n\nExamples:```!stats Expedition``````!stats Page```';
         message.channel.send(helpMsg);
     } else {
+        logCommand('stats');
         var cardname=nicify(msg.replace(prefix+'stats',''));
         logger.info('Looking for stats for '+cardname);
         var statsFile = "./images/markus_stats/"+cardname+".png";
 
-        if(fs.existsSync(statsFile)) {
-            message.channel.send('', {files:[statsFile]});
-            logger.info('Sent stats image for: '+cardname);
-        }
+        fs.access(statsFile,fs.F_OK, (err) => {
+            if(err) {
+                message.author.send('Stats file not found for ' + cardname);
+            } else {
+                message.channel.send('', {files:[statsFile]});
+                logger.info('Sent stats image for: '+cardname);
+            }
+        });
     }
 }
 
@@ -647,6 +677,7 @@ if(msg.startsWith(prefix+'results')) {
         helpMsg='The "!results" command lists the current, unprocessed 2-player results for the given player and an estimate of what that player\'s new µ, φ and rating will be based on those results. The color bar indicates the performance of the player relative to expectation, from red (underperformed) to green (overperformed).\n\nExample:```!results Freaky```';
         message.channel.send(helpMsg);
     } else {
+        logCommand('results');
         var user = msg.replace(prefix+'results','').trim();
         logger.info('Looking up unprocessed results for '+user);
         const ratingShift=50;
@@ -654,48 +685,70 @@ if(msg.startsWith(prefix+'results')) {
 
         knex('users').where('name',user).first('id')
             .then(function(uidRow) {
-                return knex('ratinghistory').where('user','=',uidRow.id).max({period:'period'}).first('user').groupBy('user')
+                if(!uidRow) {
+                    message.author.send('No user found by that name');
+                } else {
+                    return knex('ratinghistory').where('user','=',uidRow.id).max({period:'period'}).first('user').groupBy('user')
                 .then(function(ratingRow) {
                     if(!ratingRow) {
-                        message.author.send("No rating history found."); 
+                        message.author.send("No rating history found for that user."); 
                         return null; 
                     } else  {
-                        return knex.from('ratingresults as rr')
-                    .join('users as u2','rr.opponent','=','u2.id')
-                    .join('users as u1','rr.user','=','u1.id')
-                    .join('ratinghistory as rhu','rhu.user','=','rr.user')
-                    .joinRaw('left outer join ratinghistory as rho on rr.opponent = rho.user and rho.ratingType=0 and rho.period='+ratingRow.period)
-                    .where('rr.ratingType', 0)
-                    .andWhere('rr.user',ratingRow.user)
-                    .andWhere('rhu.ratingType',0)
-                    .andWhereNot('u2.status',9)
-                    .andWhere('rr.processed',0)
-                    .andWhere('rhu.period',ratingRow.period)
-                    .select('u1.name', 'u2.name as opponent','rr.gameid','rr.score','rho.skill as opp_mu','rho.deviation as opp_phi','rhu.volatility as user_sigma','rhu.skill as user_mu','rhu.deviation as user_phi')
-                    .then(function(rows) {
-                        if(rows.length>0) {
-                            var userMu=rows[0].user_mu;
-                            var userPhi=rows[0].user_phi;
-                            var userSigma=rows[0].user_sigma;
-                            var resultsArray=[]; 
-                            for(row of rows) {
-                                if(row.opp_mu == null) row.opp_mu = 0;
-                                if(row.opp_phi == null) row.opp_phi = 2;
-                                resultsArray.push({win:row.score,mu:row.opp_mu,phi:row.opp_phi});
+                        return knex.from('ratinghistory as rh')
+                    .join('users as u','u.id','=','rh.user')
+                    .where('rh.user',uidRow.id)
+                    .andWhere('period',ratingRow.period)
+                    .andWhere('ratingType',0)
+                    .first('u.name','rh.*')
+                    .then(function(currentRatingRow) {
+                        if(!currentRatingRow) {
+                            message.author.send('No rating history found for that user.'); 
+                        } else {
+                            knex.from('ratingresults as rr')
+                        .join('users as u2','rr.opponent','=','u2.id')
+                        .join('users as u1','rr.user','=','u1.id')
+                        .join('ratinghistory as rhu','rhu.user','=','rr.user')
+                        .joinRaw('left outer join ratinghistory as rho on rr.opponent = rho.user and rho.ratingType=0 and rho.period='+ratingRow.period)
+                        .where('rr.ratingType', 0)
+                        .andWhere('rr.user',ratingRow.user)
+                        .andWhere('rhu.ratingType',0)
+                        .andWhereNot('u2.status',9)
+                        .andWhere(function() {this.where('rr.processed',0).orWhere('rr.processed','>',ratingRow.period)})
+                        .andWhere('rhu.period',ratingRow.period)
+                        .select('u1.name', 'u2.name as opponent','rr.gameid','rr.score','rho.skill as opp_mu','rho.deviation as opp_phi','rhu.volatility as user_sigma','rhu.skill as user_mu','rhu.deviation as user_phi')
+                        .then(function(rows) {
+                            var userMu=currentRatingRow.skill;
+                            var userPhi=currentRatingRow.deviation;
+                            var userSigma=currentRatingRow.volatility;
+                            if(rows.length>0) {
+                                //var userMu=rows[0].user_mu;
+                                //var userPhi=rows[0].user_phi;
+                                //var userSigma=rows[0].user_sigma;
+                                var resultsArray=[]; 
+                                for(row of rows) {
+                                    if(row.opp_mu == null) row.opp_mu = 0;
+                                    if(row.opp_phi == null) row.opp_phi = 2;
+                                    resultsArray.push({win:row.score,mu:row.opp_mu,phi:row.opp_phi});
+                                } 
+
+                                var newRating=glicko.update(userMu,userPhi,userSigma,0.4,resultsArray);
+                                var winSummary=glicko.expectedWins(userMu,resultsArray);
+                                var title='Won '+winSummary.wins+'/'+winSummary.played+', expected: '+winSummary.expected.toFixed(2)+'\n';
+                                var currentMsg=(ratingScale*(userMu-2*userPhi)+ratingShift).toFixed(2)+'\tµ: '+userMu.toFixed(2).padStart(5)+'\tφ: '+userPhi.toFixed(3)+'\n'; 
+                                var newMsg=(ratingScale*(newRating.mu-2*newRating.phi)+ratingShift).toFixed(2)+'\tµ: '+newRating.mu.toFixed(2).padStart(5)+'\tφ: '+newRating.phi.toFixed(3);
+                                var performance=Math.max(Math.min(winSummary.wins-winSummary.expected,2),-2)/4 + 0.5;
+                                var winColor=parseInt(ratingGradient.rgbAt(performance).toHex(),16);
+                            } else  {
+                                var resultsArray=[];
+                                var userMu=currentRatingRow.skill;
+                                var userPhi=currentRatingRow.deviation;
+                                var userSigma=currentRatingRow.volatility;
+                                var newRating=glicko.update(userMu,userPhi,userSigma,0.4,resultsArray);
+                                var title='0 games played\n';
+                                var currentMsg=(ratingScale*(userMu-2*userPhi)+ratingShift).toFixed(2)+'\tµ: '+userMu.toFixed(2).padStart(5)+'\tφ: '+userPhi.toFixed(3)+'\n'; 
+                                var newMsg=(ratingScale*(newRating.mu-2*newRating.phi)+ratingShift).toFixed(2)+'\tµ: '+newRating.mu.toFixed(2).padStart(5)+'\tφ: '+newRating.phi.toFixed(3);
+                                var winColor=0x000000;
                             }
-                            var newRating=glicko.update(userMu,userPhi,userSigma,0.4,resultsArray);
-                            var winSummary=glicko.expectedWins(userMu,resultsArray);
-                            //var resultMsg='```Won '+winSummary.wins+'/'+winSummary.played+', expected: '+winSummary.expected.toFixed(2)+'\n';
-                            var title='Won '+winSummary.wins+'/'+winSummary.played+', expected: '+winSummary.expected.toFixed(2)+'\n';
-                            var currentMsg=(ratingScale*(userMu-2*userPhi)+ratingShift).toFixed(2)+'\tµ: '+userMu.toFixed(2).padStart(5)+'\tφ: '+userPhi.toFixed(2)+'\n'; 
-                            var newMsg=(ratingScale*(newRating.mu-2*newRating.phi)+ratingShift).toFixed(2)+'\tµ: '+newRating.mu.toFixed(2).padStart(5)+'\tφ: '+newRating.phi.toFixed(2);
-                            var performance=Math.max(Math.min(winSummary.wins-winSummary.expected,2),-2)/4 + 0.5;
-                            //if(winSummary.wins>winSummary.expected) {
-                            //    var winColor=parseInt(ratingGradient.rgbAt(0.95).toHex(),16);
-                            //} else {
-                            //    var winColor=parseInt(ratingGradient.rgbAt(0.05).toHex(),16);
-                            //}
-                            var winColor=parseInt(ratingGradient.rgbAt(performance).toHex(),16);
                             message.channel.send({embed:{
                                 color: winColor,
                                 title: title,
@@ -705,17 +758,13 @@ if(msg.startsWith(prefix+'results')) {
                                 value:currentMsg},
                                 {name:"New",
                                     value:newMsg}]}});
-                            // message.channel.send(resultMsg);
-                        } else  {
-                            message.author.send("No unprocessed results found.");
+                        }).catch((err) => {logger.error(err); throw err })
                         }
                     }).catch((err) => { logger.error( err); throw err })
                     }
                 }).catch((err) => { logger.error( err); throw err })
+                }
             }).catch((err) => { logger.error(err); throw err })
-        //  .finally(() => {
-        //      knex.destroy();
-        //  });
     }
 }
 
@@ -802,6 +851,7 @@ if(msg.startsWith(prefix+'rating')) {
         helpMsg='The "!rating" command displays the rating, skill (µ) and deviation (φ) of a given user or comma-separated list of users.\n\nExamples:```!rating Cave-o-sapien``````!rating Stef,tracer,RTT```';
         message.channel.send(helpMsg);
     } else {
+        logCommand('rating');
         var users = msg.replace(prefix+'rating','').split(",").map(function(x) {
             return x.trim();});
 
@@ -823,7 +873,7 @@ if(msg.startsWith(prefix+'rating')) {
             knex.on('query',function(query) {
                 sqlLogger.info(moment().format() + " Executed query: "+query.sql+" with bindings:"+query.bindings);
             });
-                var ratingQ = knex('ratinghistory').where('ratingType',0).max('period');
+            var ratingQ = knex('ratinghistory').where('ratingType',0).max('period');
             knex.from('ratinghistory')
                 .join('users','users.id','=','ratinghistory.user')
                 .whereIn('name', users)
@@ -883,69 +933,74 @@ if(msg.startsWith(prefix+'versus')) {
         helpMsg='The "!versus" command displays the head-to-head results (rated 2-player games only) between two given players from the perspective of the first player in the list. The color bar represents the winning percentage, from red (bad) to green (good).\n\nExamples:```!versus Cave-o-sapien, Stef``````!versus Stef, Cave-o-sapien```';
         message.channel.send(helpMsg);
     } else {
-    var users = msg.replace(prefix+'versus','').split(",").map(function(x) {
-        return x.trim();});
-    // check for exactly 2 users
-    // Do we need to do subqeries here for performance reasons?
-    // Performance seems best using just name, despite lack of indexes
-    logger.info('Looking up head-to-head results for '+users);
-    knex('users').where('name',users[0]).first('id')
-        .then(function(user1Row) {
-            if(!user1Row) {
-                message.author.send("No user found with name '"+users[0]+"'");
-                return null;
-            } else  {
-                return knex('users')
-            .where('name',users[1]).first('id')
-            .then(function(user2Row) {
-                if(!user2Row) {
-                    message.author.send("No user found with name '"+users[1]+"'");
-                } else {
-                    return knex.from('ratingresults as rr')
-                .join('users as u1','rr.user','=','u1.id')
-                .join('users as u2','rr.opponent','=','u2.id')
-                .where('rr.ratingType', 0)
-                .andWhere('u1.id',user1Row.id)
-                .andWhere('u2.id',user2Row.id)
-                .select('u1.name as user','u2.name as opponent','rr.score')
-                .countDistinct('gameid as count')
-                .groupBy('u1.name','u2.name','rr.score').then(function(rows) {
-                    if(rows.length>0) {
-                        var wins=[0,0,0];
-                        var player1=rows[0].user;
-                        var player2=rows[0].opponent;
-                        for(row of rows) {
-                            if(row.score==0.5) {
-                                wins[2]+=row.count;
-                                logger.info(row.user+" "+row.opponent+" "+row.count+" "+row.score);
-                            } else {
-                                wins[0]+=(row.count*row.score);
-                                wins[1]+=(row.count*(1-row.score));
-                                logger.info(row.user+" "+row.opponent+" "+row.count+" "+row.score);
+        logCommand('versus');
+        var users = msg.replace(prefix+'versus','').split(",").map(function(x) {
+            return x.trim();});
+        logger.info('Looking up head-to-head results for '+users);
+        knex('users').where('name',users[0]).first('id')
+            .then(function(user1Row) {
+                if(!user1Row) {
+                    message.author.send("No user found with name '"+users[0]+"'");
+                    return null;
+                } else  {
+                    return knex('users')
+                .where('name',users[1]).first('id')
+                .then(function(user2Row) {
+                    if(!user2Row) {
+                        message.author.send("No user found with name '"+users[1]+"'");
+                    } else {
+                        return knex.from('ratingresults as rr')
+                    .join('users as u1','rr.user','=','u1.id')
+                    .join('users as u2','rr.opponent','=','u2.id')
+                    .joinRaw('inner join ratinghistory as rh1 on rh1.user=u1.id and rh1.period=rr.processed and rh1.ratingType=0')
+                    .joinRaw('inner join ratinghistory as rh2 on rh2.user=u2.id and rh2.period=rr.processed and rh2.ratingType=0')
+                    .where('rr.ratingType', 0)
+                    .andWhere('u1.id',user1Row.id)
+                    .andWhere('u2.id',user2Row.id)
+                    .select('u1.name as user','u2.name as opponent','rh1.skill as user_mu','rh1.deviation as user_phi','rh2.skill as opp_mu','rh2.deviation as opp_phi','rr.score')
+                    .then(function(rows) {    
+                        if(rows.length>0) {
+                            var wins=[0,0,0];
+                            var expected=0;
+                            var player1=rows[0].user;
+                            var player2=rows[0].opponent;
+                            for(row of rows) {
+                                expected+=glicko.expectedWins(row.user_mu,Array({win:row.score,mu:row.opp_mu,phi:row.opp_phi})).expected;
+                                logger.info('Running count of expected wins: '+expected);
+                                if(row.score==0.5) {
+                                    wins[2]++;
+                                    logger.info(row.user+" "+row.opponent+" "+row.count+" "+row.score);
+                                } else {
+                                    if(row.score==1) {
+                                        wins[0]++;
+                                    } else {
+                                        wins[1]++;
+                                    }
+                                    logger.info(row.user+" "+row.opponent+" "+row.count+" "+row.score);
+                                }
                             }
+                            logger.info('Results: '+wins[0]+"-"+wins[1]+"-"+wins[2]);
+                            if(wins[2]>0) {
+                                var winColor=parseInt(ratingGradient.rgbAt((wins[0]+0.5*wins[2])/(wins[0]+wins[1]+wins[2])).toHex(),16);
+                                message.channel.send({embed:{
+                                    color: winColor,
+                                    title: player1+' v. '+player2 + " (W–L–D)",
+                                    description: wins[0]+'–'+wins[1]+'–'+wins[2]+'\nExpected wins: '+expected.toFixed(2)}});
+                            } else {
+                                var winColor=parseInt(ratingGradient.rgbAt(wins[0]/(wins[0]+wins[1])).toHex(),16);
+                                message.channel.send({embed:{
+                                    color: winColor,
+                                    title: player1+' v. '+player2 +" (W–L)",
+                                    description: wins[0]+'–'+wins[1]+'\nExpected wins: '+expected.toFixed(2)}});
+                            }
+                        } else  {
+                            message.author.send("No data found");
                         }
-                        logger.info('Results: '+wins[0]+"-"+wins[1]+"-"+wins[2]);
-                        if(wins[2]>0) {
-                            var winColor=parseInt(ratingGradient.rgbAt((wins[0]+0.5*wins[2])/(wins[0]+wins[1]+wins[2])).toHex(),16);
-                            message.channel.send({embed:{
-                                color: winColor,
-                                title: player1+' v. '+player2 + " (W–L–D)",
-                                description: wins[0]+'–'+wins[1]+'–'+wins[2]}});
-                        } else {
-                            var winColor=parseInt(ratingGradient.rgbAt(wins[0]/(wins[0]+wins[1])).toHex(),16);
-                            message.channel.send({embed:{
-                                color: winColor,
-                                title: player1+' v. '+player2 +" (W–L)",
-                                description: wins[0]+'–'+wins[1]}});
-                        }
-                    } else  {
-                        message.author.send("No data found");
+                    }).catch((err) => { logger.error( err); throw err })
                     }
                 }).catch((err) => { logger.error( err); throw err })
                 }
             }).catch((err) => { logger.error( err); throw err })
-            }
-        }).catch((err) => { logger.error( err); throw err })
     }
 }
 // show someone their peers on the leaderboard
@@ -958,35 +1013,20 @@ if(msg.startsWith(prefix+'peers')) {
         helpMsg='The "!peers" command displays the rating and leaderboard position of a given user and those of the 10 people bracketing them on the Shuffle iT leaderboard.\n\nExample:```!peers Cave-o-sapien```';
         message.channel.send(helpMsg);
     } else {
+        logCommand('peers');
         var user=nicify(msg.replace(prefix+'peers',''));
-        //       var topN=10;
         var sortBy='rating';
         var orderByClause='7.5*(skill-2*deviation) desc';
 
         // Check leader cache for rating leaderboard
         if(!leaderCache.has(sortBy)) {
-            /*
-               var dbInfo = config.shitdb.prod;
-               logger.info('Database is:'+dbInfo.database);
-               var knex = require('knex')({
-               client: dbInfo.client,
-               connection: {
-               host : dbInfo.host,
-               user : dbInfo.user,
-               password : dbInfo.password,
-               database : dbInfo.database}
-               });
-               knex.on('query',function(query) {
-               sqlLogger.info(moment().format() + " Executed query: "+query.sql+" with bindings:"+query.bindings);
-               });
-               */
             var leaderQ = knex('ratinghistory').where('ratingType',0).max('period');
             knex.from('ratinghistory')
                 .join('users','users.id','=','ratinghistory.user')
                 .where('ratingType', 0)
                 .andWhere('period',leaderQ)
                 .andWhereNot('users.status',9)
-                .select('users.name', 'ratinghistory.*').limit(1000).orderByRaw(orderByClause).then(function(rows) {
+                .select('users.name', 'ratinghistory.*').limit(30000).orderByRaw(orderByClause).then(function(rows) {
                     if(rows.length>0) {
                         leaderCache.set(sortBy,rows);
                         var period=rows[0].period;
@@ -995,7 +1035,7 @@ if(msg.startsWith(prefix+'peers')) {
                             var topPeer=Math.max(userIndex-5,0);
                             var bottomPeer=Math.min(userIndex+6,rows.length);
                             logger.info('User position on leaderboard is:'+userIndex);
-                            var peerMsg="Shuffle iT peers ("+sortBy+",period "+period+")\n——————————————————————————————————————————\n"; 
+                            var peerMsg="Shuffle iT peers ("+sortBy+", "+periodToDate(ratingStartDate,period).toLocaleDateString()+")\n——————————————————————————————————————————\n"; 
                             var paddingLength=rows.slice(topPeer,bottomPeer).reduce(function(a,b) {return a.name.length > b.name.length ? a:b;}).name.length;
                             for(i=topPeer; i<bottomPeer; i++) {
                                 logger.info(rows[i].name + " " +rows[i].skill+ " " +rows[i].period);
@@ -1012,7 +1052,6 @@ if(msg.startsWith(prefix+'peers')) {
                         message.author.send("No data found");
                     }
                 }).catch((err) => { logger.error( err); throw err })
-            //     .finally(() => { knex.destroy();});
         } else {
             logger.info('Pulling cached leaderboard for '+sortBy);
             var rows=leaderCache.get(sortBy);
@@ -1021,7 +1060,7 @@ if(msg.startsWith(prefix+'peers')) {
             if(userIndex>=0) {
                 var topPeer=Math.max(userIndex-5,0);
                 var bottomPeer=Math.min(userIndex+6,rows.length);
-                var peerMsg="Shuffle iT peers ("+sortBy+",period "+period+")\n——————————————————————————————————————————\n"; 
+                var peerMsg="Shuffle iT peers ("+sortBy+", "+periodToDate(ratingStartDate,period).toLocaleDateString()+")\n——————————————————————————————————————————\n"; 
                 var paddingLength=rows.slice(topPeer,bottomPeer).reduce(function(a,b) {return a.name.length > b.name.length ? a:b;}).name.length;
                 for(i=topPeer; i<bottomPeer; i++) {
                     logger.info(rows[i].name + " " +rows[i].skill+ " " +rows[i].period);
@@ -1047,7 +1086,7 @@ if(msg.startsWith(prefix+'leader')) {
         helpMsg='The "!leader" command displays the top N of the Shuffle iT leaderboard. By default N=10 and the leaderboard is sorted by rating. Max N is 25 due to message size restrictions. To see where a particular user is on the leaderboard, try the "!peers" command. The leaderboard can optionally be sorted by skill (µ) by including "µ" or "skill" after the command.\n\nExamples: ```!leader``````!leader20 mu```';
         message.channel.send(helpMsg);
     } else {
-
+        logCommand('leader');
         var topN=10;
         var sortBy='rating';
         var orderByClause='7.5*(skill-2*deviation) desc';
@@ -1072,7 +1111,7 @@ if(msg.startsWith(prefix+'leader')) {
                 .where('ratingType', 0)
                 .andWhere('period',leaderQ)
                 .andWhereNot('users.status',9)
-                .select('users.name', 'ratinghistory.*').limit(1000).orderByRaw(orderByClause).then(function(rows) {
+                .select('users.name', 'ratinghistory.*').limit(30000).orderByRaw(orderByClause).then(function(rows) {
                     if(rows.length>0) {
                         leaderCache.set(sortBy,rows);
                         var j=0;
@@ -1093,7 +1132,6 @@ if(msg.startsWith(prefix+'leader')) {
                         message.author.send("No data found");
                     }
                 }).catch((err) => { logger.error( err); throw err })
-            //.finally(() => { knex.destroy();});
         } else {
             logger.info('Pulling cached leaderboard for '+sortBy);
             var rows=leaderCache.get(sortBy);
@@ -1120,6 +1158,7 @@ if(msg.startsWith(prefix+'history')) {
         helpMsg='The "!history" command displays some of Donald X.’s design notes (aka "Secret History") for a given card or card-shaped thing.\n\nExamples:```!history Secret Chamber``````!history Expedition```\nTo conserve channel space, the text is rendered as an image. For some of the longer histories, you may need to open the image in your browser.';
         message.channel.send(helpMsg);
     } else {
+        logCommand('history');
         logger.info('Secret history command invoked');
         var requestedCard=nicify(msg.replace(prefix+'history',''));
         logger.info('Requested card name (nice): '+requestedCard);
@@ -1165,6 +1204,7 @@ if(msg.startsWith(prefix+'kingdom')) {
         helpMsg='The "!kingdom" command displays a kingdom image based on *either* a Shuffle iT game ID or comma-separated list of cards, events and landmarks. For the CSV-list version, it requires at least 10 unique cards. If a Looter is included but no specific Ruin is specified, one will be randomly chosen and included. Likewise, if the list includes "Knights" but no named Knight, then one will be randomly chosen. The Young Witch Bane can be indicated by a "(b)" after the desired Bane card name. No Bane will be automatically included (at this time). If either Colony or Platinum is included in the list, both will be displayed.\n\nExample: ```!kingdom knights,artificer,market,tomb,bonfire,urchin,relic,death cart,vampire,bandit camp,dungeon(b),young witch,werewolf``````!kingdom 21278249```';
         message.channel.send(helpMsg);
     } else {
+        logCommand('kingdom');
         getKingdom(null,msg.replace(prefix+'kingdom',''),drawKingdom,function(err,filename) {
             message.channel.send('', {files:["/tmp/"+filename+".png"]})});
     } }

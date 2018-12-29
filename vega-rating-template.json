@@ -27,7 +27,7 @@
             "range": "width",
             "padding": 0.05,
             "round": true,
-            "nice":true
+      "nice":false
         },
         {
             "name": "yscale",
