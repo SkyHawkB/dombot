@@ -5,4 +5,5 @@ images/art
 config.json
 config.js
 dombot.log
+dombot-sql.log
 logs/

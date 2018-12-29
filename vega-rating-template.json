@@ -1,0 +1,118 @@
+{
+    "$schema": "https://vega.github.io/schema/vega/v4.json",
+    "width": 400,
+    "height": 200,
+    "padding": 5,
+
+    "data": [],
+    "title": {
+        "text" : "Shuffle iT Rating: ",
+        "anchor" :"start",
+        "color":"gray",
+        "fontSize":16
+    },
+
+    "signals": [
+    {
+        "name": "interpolate",
+        "value": "linear"
+    }
+    ],
+
+        "scales": [
+        {
+            "name": "xscale",
+            "type": "time",
+            "domain": {"data": "ratings", "field": "period"},
+            "range": "width",
+            "padding": 0.05,
+            "round": true,
+            "nice":false
+        },
+        {
+            "name": "yscale",
+            "domain": {"data": "ratings", "field": "rating"},
+            "nice": true,
+            "zero": false,
+            "range": "height"
+        },
+        {
+            "name": "color",
+            "type": "ordinal",
+            "range": {"scheme":"category10"},
+            "domain": {"data": "ratings", "field": "type"}
+        }
+    ],
+        "legends": [
+        {
+            "stroke": "color",
+            "labelColor" :"gray",
+            "labelFontSize":12,
+            "direction": "horizontal",
+            "orient": "top",
+            "encode": {
+                "symbols": {
+                    "enter": {
+                        "strokeWidth": {"value": 2}
+                    }
+                }
+            },
+            "symbolType": "M-1,0H 1.75"
+        }
+    ],
+
+        "axes": [
+        { "orient": "bottom", 
+            "scale": "xscale",
+            "tickColor":"gray",
+            "labelColor":"gray",
+            "tickCount":"month"
+        },
+        { "orient": "left", 
+            "scale": "yscale",
+            "labelColor" :"gray",
+            "tickColor":"gray" },
+        {"orient":"right",
+            "scale":"yscale",
+            "labelColor":"gray",
+            "tickColor":"gray",
+            "encode" : {
+                "labels": {
+                    "update": {
+                        "text": {"signal": "format((datum.value-50)/7.5,',.2f')"}
+                    }
+                }
+            }
+        }
+    ],
+
+        "marks": [
+        {
+            "type":"group",
+            "from": {
+                "facet": {
+                    "name":"series",
+                    "data":"ratings",
+                    "groupby":"type"
+                }
+            },
+            "marks": [
+            {
+                "type": "line",
+                "from": {"data":"series"},
+                "encode": {
+                    "enter": {
+                        "x": {"scale": "xscale", "field": "period"},
+                        "y": {"scale": "yscale", "field": "rating"},
+                        "stroke": {"scale":"color","field":"type"},
+                        "strokeWidth": {"value": 2}
+                    },
+                    "update": {
+                        "interpolate": {"signal": "interpolate"}
+                    }
+                }
+            }
+            ]
+        }
+    ]
+}
