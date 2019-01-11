@@ -6,14 +6,11 @@ const fs = require('fs');
 const stream = require('stream');
 const config = require('./config');
 const tinygradient = require('tinygradient');
-//const cardFile=fs.readFileSync("all_cards.json");
 const historyFile=fs.readFileSync("secret_all.json");
-//const artistFile=fs.readFileSync("artists.json");
 const completeFile=fs.readFileSync("dominion.cards.json");
 const request=require("request");
 const winston=require('winston');
 const async=require('async');
-//const knex=require('knex');
 const vega=require('vega');
 const LRU=require('lru-cache');
 const glicko=require('./glicko');
@@ -46,6 +43,7 @@ commandCounts = {'rating':0,'versus':0,
     'prior':0,
     'text':0,
     'stats':0,
+    'match':0,
     'art':0};
 
 // Connect to DB, setup pool
@@ -63,14 +61,12 @@ knex.on('query',function(query) {
     sqlLogger.info(moment().format() + " Executed query: "+query.sql+" with bindings:"+query.bindings);
 });
 
-// Set max age of cache to 30 minutes
-var ratingCache=LRU({max:2000,maxAge:30*1000*60});
-var leaderCache=LRU({max:30000,maxAge:60*1000*60});
+var ratingCache=LRU({max:2000,maxAge:30*1000*60}); // 30 minutes
+var leaderCache=LRU({max:30000,maxAge:60*1000*60}); // 60 minutes
+var gameCache=LRU({max:1000000,maxAge:1000*60*60*48}); // 2 days
 var currentPeriod=0;
 
-//var cardList=JSON.parse(cardFile);
 var allHist=JSON.parse(historyFile);
-//var cardArt=JSON.parse(artistFile);
 var fullInfo=JSON.parse(completeFile);
 var ratingGradient=tinygradient('red','white','green');
 
@@ -91,12 +87,6 @@ function periodToDate(startDate, period) {
 function nicify(inputName) {
     return inputName.trim().replace(/'|’/g,"").replace(/\s/g,"-").replace(/_/g,"-").toLowerCase();
 }
-
-//function hexToIntColor(rrggbb) {
-//       var bbggrr = rrggbb.substr(4, 2) + rrggbb.substr(2, 2) + rrggbb.substr(0, 2);
-//           return parseInt(bbggrr, 16);
-//`}
-
 
 function mapWinColor(p) {
     var color;
@@ -132,7 +122,6 @@ function splitLines(longString, maxChars) {
                 }
             }
         }
-    // Add last line
     lines.push(line.replace(/\n/g,""));
     return lines;
 }
@@ -153,23 +142,7 @@ function getKingdom(err, kingdomStr, drawCallback, msgCallback) {
         }
 
         if(mode=='gameid') {
-            /*
-               var dbInfo = config.shitdb.prod;
-               logger.info('Database is:'+dbInfo.database);
-               var knex = require('knex')({
-               client: dbInfo.client,
-               connection: {
-               host : dbInfo.host,
-               user : dbInfo.user,
-               password : dbInfo.password,
-               database : dbInfo.database}
-               });
-               knex.on('query',function(query) {
-               sqlLogger.info(moment().format() + " Executed query: "+query.sql+" with bindings:"+query.bindings);
-               });
-               */
             logger.info('Game ID:'+gameId);
-
             knex.from('gameresults')
                 .where('gameid','=',gameId)
                 .first('pregame','gameid','gameresult')
@@ -182,12 +155,24 @@ function getKingdom(err, kingdomStr, drawCallback, msgCallback) {
                             logger.info(row.pregame);
                             var gameInfo=JSON.parse(row.pregame);
                             var gameResult=JSON.parse(row.gameresult);
-                            // Need to check below for ALL playerResults, look for parts that matches Obelisk
-                            //console.log(gameResult.playerResults[0].score.parts[1].explanation.arguments[1].argumentValue.cardObjectName);
+                            var obeliskCard='';
+                            for(player of gameResult.playerResults) {
+                                for(part of player.score.parts) {
+                                    if(part.cardObjectName=='OBELISK') {
+                                        for(arg of part.explanation.arguments) {
+                                            if(arg.argumentType=='SINGULAR_CARD') {
+                                                obeliskCard=arg.argumentValue.cardObjectName;
+                                            } 
+                                        }
+                                    }
+                                }
+                            }
                             kingdom=gameInfo.gameParameters.setupInstructions.kingdom;
                             var baneCard=gameInfo.gameParameters.setupInstructions.baneCard;
                             logger.info('Bane: '+baneCard);
+                            logger.info('Obelisk: '+obeliskCard);
                             kingdom[kingdom.indexOf(baneCard)]+='(b)';
+                            kingdom[kingdom.indexOf(obeliskCard)]+='(o)';
                             var colony=gameInfo.gameParameters.setupInstructions.usesColonies;
                             logger.info('Colony: '+colony);
                             if (colony) {
@@ -197,7 +182,6 @@ function getKingdom(err, kingdomStr, drawCallback, msgCallback) {
                             logger.info('Kingdom: '+kingdom);
                             logger.info('Kingdom count: '+kingdom.length);
                             drawCallback(null,kingdom,msgCallback);
-                            //message.channel.send("No data found");
                         }         
                     }})
         } else drawCallback(null,kingdom,msgCallback); 
@@ -214,8 +198,24 @@ function drawKingdom(err, kingdom, msgCallback) {
             name:'',
             X:0,
             Y:0,
+            xnudge:0,
             type:'',
-            textColor:''
+            textColor:'',
+            index:-1,
+            size:30,
+            text:'BANE'
+        };
+
+        var obelisk={
+            name:'',
+            X:0,
+            Y:0,
+            xnudge:0,
+            type:'',
+            textColor:'',
+            index:-1,
+            size:30,
+            text:'OBELISK'
         };
 
         logger.info('drawKingdom: Kingdom list:'+kingdom);
@@ -225,13 +225,34 @@ function drawKingdom(err, kingdom, msgCallback) {
             if(kingdom[i]=='castles')
                 kingdom[i]='humble-castle';
             if(kingdom[i].indexOf('(b)')>0) {
+                bane.index=i;
+            }
+            if(kingdom[i].indexOf('(o)')>0){
+                obelisk.index=i;
+            }
+            if(bane.index==i) {
                 kingdom[i]=kingdom[i].replace(/\(b\)/,"");
+                kingdom[i]=kingdom[i].replace(/\(o\)/,"");
                 kingdom[i]=kingdom[i].replace(/-$/,"");
                 bane.name=kingdom[i];
                 bane.type=fullInfo.filter(function(x){ return x.nicename==bane.name })[0].type;
                 logger.info('Bane is '+bane.name);
                 logger.info('Bane type is '+bane.type);
-
+            }
+            if(obelisk.index==i) {
+                if(obelisk.index==bane.index) {
+                    bane.text=bane.text+'/OBELISK';
+                    bane.size=24;
+                    bane.xnudge=-25;
+                } else {
+                    kingdom[i]=kingdom[i].replace(/\(o\)/,"");
+                    kingdom[i]=kingdom[i].replace(/\(b\)/,"");
+                    kingdom[i]=kingdom[i].replace(/-$/,"");
+                    obelisk.name=kingdom[i];
+                    obelisk.type=fullInfo.filter(function(x){ return x.nicename==obelisk.name })[0].type;
+                    logger.info('Obelisk is '+obelisk.name);
+                    logger.info('Obelisk type is '+obelisk.type);
+                }
             }
         }	
 
@@ -279,11 +300,14 @@ function drawKingdom(err, kingdom, msgCallback) {
             if(b.cost.cons<0) b.cost.coins++;
             if(a.cost.coins==b.cost.coins)
                 if(a.cost.potion==b.cost.potion)
-                    return(a.cost.debt < b.cost.debt) ? -1 : (a.cost.debt > b.cost.debt) ? 1 : 0;
+                    if(a.cost.debt==b.cost.debt) {
+                        return(a.nicename<b.nicename) ? -1  : (a.nicename > b.nicename) ? 1 : 0;
+                    } else
+                        return(a.cost.debt < b.cost.debt) ? -1 : (a.cost.debt > b.cost.debt) ? 1 : 0;
+                    else
+                        return(a.cost.potion < b.cost.potion) ? -1 : (a.cost.potion > b.cost.potion) ? 1 : 0;
                 else
-                    return(a.cost.potion < b.cost.potion) ? -1 : (a.cost.potion > b.cost.potion) ? 1 : 0;
-            else
-                return(a.cost.coins < b.cost.coins) ? -1 : (a.cost.coins > b.cost.coins) ? 1 : 0;};
+                    return(a.cost.coins < b.cost.coins) ? -1 : (a.cost.coins > b.cost.coins) ? 1 : 0;};
 
         cardSupply.sort(costSort);
         csoSupply.sort(costSort);
@@ -344,6 +368,15 @@ function drawKingdom(err, kingdom, msgCallback) {
                         bane.textColor='black';
                     logger.info('Bane location: '+bane.X+','+bane.Y);
                 }				
+                if(row1[i]=="./images/cards/"+obelisk.name+".jpg") {
+                    obelisk.X=i*(padding+cardWidth);
+                    obelisk.Y=cardHeight+padding;
+                    if(obelisk.type=='Night' || obelisk.type=='Night-Duration')
+                        obelisk.textColor='white';
+                    else
+                        obelisk.textColor='black';
+                    logger.info('Obelisk location: '+obelisk.X+','+obelisk.Y);
+                }				
             }
             for(var i=0; i<row2.length;i++) {
                 gmCommand = gmCommand + ".in('-page','+"+i*(padding+cardWidth)+"+0').in('"+row2[i]+"')";
@@ -356,7 +389,20 @@ function drawKingdom(err, kingdom, msgCallback) {
                         bane.textColor='black';
                     logger.info('Bane location: '+bane.X+','+bane.Y);
                 }
+                if(row2[i]=="./images/cards/"+obelisk.name+".jpg") {
+                    obelisk.X=i*(padding+cardWidth);
+                    obelisk.Y=0;
+                    if(obelisk.type=='Night' || obelisk.type=='Night-Duration')
+                        obelisk.textColor='white';
+                    else
+                        obelisk.textColor='black';
+                    logger.info('Obelisk location: '+obelisk.X+','+obelisk.Y);
+                }
             }
+
+            //if(bane.name==obelisk.name) {
+            //    bane.text=bane.text+"/OBELISK";
+            //}
 
             for(var i=0; i<csoFiles.length;i++) {
                 gmCommand = gmCommand + ".in('-page','+"+i*(csoWidth+padding)+"+"+2*(padding+cardHeight)+"').in('"+csoFiles[i]+"')";
@@ -367,10 +413,13 @@ function drawKingdom(err, kingdom, msgCallback) {
             eval(gmCommand);
             gm(passThrough)
                 .background('transparent')
-                .fontSize('30')
+                .fontSize(bane.size)
                 .fill(bane.textColor)
                 .font('TrajanPro-Bold.ttf')
-                .draw('text +'+(bane.X+110)+'+'+(bane.Y+290)+' BANE')
+                .draw('text +'+(bane.X+110+bane.xnudge)+'+'+(bane.Y+290)+' '+bane.text)
+                .fontSize(obelisk.size)
+                .fill(obelisk.textColor)
+                .draw('text +'+(obelisk.X+110+obelisk.xnudge)+'+'+(obelisk.Y+290)+' '+obelisk.text)
                 .resize(800,null)
                 .write('/tmp/'+filename+'.png',function(err) {
                     if(!err) {
@@ -391,7 +440,8 @@ function drawKingdom(err, kingdom, msgCallback) {
 }
 
 bot.on('ready', function (evt) {
-    logger.info('Connected');
+    bot.user.setActivity('type !help');
+    logger.info('Connected '+moment().format());
     logger.info('Logged in as: '+bot.user.username + ' - (' + bot.user.id + ')');
         });
     bot.on('message', message => {
@@ -401,34 +451,32 @@ bot.on('ready', function (evt) {
         message.channel.send({embed:{
             color: 3447003,
             title: 'Dominion Discord Bot Commands',
-            //  description: prevMsg,
             fields:[{
                 name:'Card info',
-            //value:'generate kingdom image from game ID or CSV list'},
             value:'**!history** secret history for a card-shaped thing\n**!art** illustration for a card-shaped thing\n**!text** text for a card-shaped thing'},
             {name:'Shuffle iT info',
                 value:'**!kingdom** generate kingdom image from game ID or CSV list\n**!rating** player rating\n**!leader** current leaderboard\n**!peers** players with similar rank\n**!chart** longitudinal rating chart\n**!versus** head-to-head results for two players\n**!results** unprocessed game results\n**!prior** summary of prior five games'},
             {name:'More info',
                 value:'Each of these commands also works in a direct message to the bot.\nMore information for each command available by appending the word \'help\' to that command: e.g.```!kingdom help```'}]}});
     }
-if(msg.startsWith(prefix+'status')) {
-    var commandText='';
-    for(var cmd in commandCounts) {
-        if(commandCounts.hasOwnProperty(cmd)){
-            commandText+=cmd+': '+commandCounts[cmd]+"\n";
+    if(msg.startsWith(prefix+'status')) {
+        var commandText='';
+        for(var cmd in commandCounts) {
+            if(commandCounts.hasOwnProperty(cmd)){
+                commandText+=cmd+': '+commandCounts[cmd]+"\n";
+            }
         }
-    }
-    message.channel.send({embed:{
-        color: 3447003,
-        title: "Dombot Status",
-        fields:[{
-            name:"Command Counts",
-        value:commandText},
-        {
-            name:"Cache Sizes",
-        value:"Leader cache: "+leaderCache.length+"\nRating cache: "+ratingCache.length}]}});
+        message.channel.send({embed:{
+            color: 3447003,
+            title: "Dombot Status",
+            fields:[{
+                name:"Command Counts",
+            value:commandText},
+            {
+                name:"Cache Sizes",
+            value:"Leader cache: "+leaderCache.length+"\nRating cache: "+ratingCache.length+"\nGame cache:"+gameCache.length}]}});
 
-}
+    }
     if(msg.startsWith(prefix+'art')) {
         if(nicify(msg.replace(prefix+'art',''))=='help') {
             logger.info('Display help message for art');
@@ -458,190 +506,379 @@ if(msg.startsWith(prefix+'status')) {
             }
         }
     }
-if(msg.startsWith(prefix+'prior')) {
-    if(nicify(msg.replace(prefix+'prior',''))=='help') {
-        logger.info('Display help message for previous');
-        helpMsg='The "!prior" commands displays a brief summary of the previous 5 games for the indicated user, including game IDs and a comma-separated list of the kingdom cards (that can be pasted into the card selection window at Dominion Online).\n\nExample:```!prior crlundy```';
-        message.channel.send(helpMsg);
-    } else {
-        logCommand('prior');
-        var user = msg.replace(prefix+'prior','').trim();
-        logger.info('Looking up unprocessed results for '+user);
-        const ratingShift=50;
-        const ratingScale=7.5;
-        knex('users').where('name',user).first('id')
-            .then(function(uidRow) {
-                if(!uidRow) {
-                    message.author.send("No user found with that name.");
-                    return null;
-                } else  {
-                    return knex.from('ratingresults as rr')
-                .join('users as u2','rr.opponent','=','u2.id')
-                .join('users as u1','rr.user','=','u1.id')
-                .join('gameresults as gr','gr.gameid','=','rr.gameid')
-                .where('rr.ratingType', 0)
-                .andWhere('rr.user',uidRow.id)
-                .select('u1.name', 'u2.name as opponent','rr.gameid','rr.score','gr.gameid','gr.gameresult','gr.pregame')
-                .orderBy('gr.gameid','desc')
-                .limit(5)
-                .then(function(rows) {
-                    if(rows.length>0) {
-                        var paddingLength=rows.reduce(function(a,b) {return a.opponent.length > b.opponent.length ? a:b;}).opponent.length;
-                        var prevMsg='';
-                        var prevTitle='Recent games';
-                        var games=[];
-                        for(row of rows) {
-                            var gameInfo=JSON.parse(row.pregame);
-                            if(gameInfo) {
-                                kingdom=gameInfo.gameParameters.setupInstructions.kingdom.map(function(x) {
-                                    return nicify(x);});
-                                kingdomCards=fullInfo.filter(function(x){return kingdom.includes(x.nicename)}).map(function(x) {
-                                    return x.name});
-                            }
-                            var result=(row.score==1) ? 'W' : (row.score==0.5) ? 'D' : 'L';
-                            games.push({gameid:row.gameid,opponent:row.opponent,result:result,kingdom:kingdomCards.join(', ')});
-                            //prevMsg+="**"+row.gameid.toString().padStart(10)+'**\t'+row.opponent+'\t'+"("+result+")"+'\t'+kingdomCards.toString().substring(0,60)+'...\n';
-                        } 
-                        message.channel.send({embed:{
-                            color: 3447003,
-                            title: prevTitle,
-                            //  description: prevMsg,
-                            fields:[{
-                                name:games[0].gameid + " v. *"+games[0].opponent+" ("+games[0].result+")*",
-                            value:games[0].kingdom},
-                            {name:games[1].gameid + " v. *"+games[1].opponent+" ("+games[1].result+")*",
-                                value:games[1].kingdom},
-                            {name:games[2].gameid + " v. *"+games[2].opponent+" ("+games[2].result+")*",
-                                value:games[2].kingdom},
-                            {name:games[3].gameid + " v. *"+games[3].opponent+" ("+games[3].result+")*",
-                                value:games[3].kingdom},
-                            {name:games[4].gameid + " v. *"+games[4].opponent+" ("+games[4].result+")*",
-                                value:games[4].kingdom}]}});
-                    }
-                    else  {
-                        message.author.send("No games found.");
-                    }
-                }).catch((err) => { logger.error( err); throw err })
-                }
-            }).catch((err) => { logger.error(err); throw err })
-    }
-}
-if(msg.startsWith(prefix+'previous')) {
-    if(nicify(msg.replace(prefix+'previous',''))=='help') {
-        logger.info('Display help message for previous');
-        helpMsg='The "!previous" commands displays a brief summary of the previous 10 games, including game IDs.\n\nUsage: ```!previous <user>```\nExample:```!previous Cave-o-sapien```';
-        message.channel.send(helpMsg);
-    } else {
-        var user = msg.replace(prefix+'previous','').trim();
-        logger.info('Looking up unprocessed results for '+user);
-        const ratingShift=50;
-        const ratingScale=7.5;
-        knex('users').where('name',user).first('id')
-            .then(function(uidRow) {
-                if(!uidRow) {
-                    message.author.send("No user found with that name.");
-                    return null;
-                } else  {
-                    return knex.from('ratingresults as rr')
-                .join('users as u2','rr.opponent','=','u2.id')
-                .join('users as u1','rr.user','=','u1.id')
-                .join('gameresults as gr','gr.gameid','=','rr.gameid')
-                .where('rr.ratingType', 0)
-                .andWhere('rr.user',uidRow.id)
-                //.andWhere('rr.processed',0)
-                .select('u1.name', 'u2.name as opponent','rr.gameid','rr.score','gr.gameid','gr.gameresult','gr.pregame')
-                .orderBy('gr.gameid','desc')
-                .limit(10)
-                .then(function(rows) {
-                    if(rows.length>0) {
-                        var paddingLength=rows.reduce(function(a,b) {return a.opponent.length > b.opponent.length ? a:b;}).opponent.length;
-                        var prevMsg='```'+String('ID').padStart(10)+'\t'+String('Opponent').padStart(paddingLength)+'\tResult\tKingdom\n';
-                        prevMsg+=String('—').repeat(10+6+43+paddingLength+(4*3))+'\n';
-                        //     var prevTitle='Recent games';
-                        //     var prevMsg='';
-                        for(row of rows) {
-                            var gameInfo=JSON.parse(row.pregame);
-                            if(gameInfo) {
-                                kingdom=gameInfo.gameParameters.setupInstructions.kingdom.map(function(x) {
-                                    return nicify(x);});
-                                kingdomCards=fullInfo.filter(function(x){return kingdom.includes(x.nicename)}).map(function(x) {
-                                    return x.name});
-                            }
-                            var result=(row.score==1) ? 'W' : (row.score==0.5) ? 'D' : 'L';
-                            prevMsg+=row.gameid.toString().padStart(10)+'\t'+row.opponent.padStart(paddingLength)+'\t'+result.padStart(6)+'\t'+kingdomCards.toString().substring(0,40)+'...\n';
-                            //prevMsg+=row.gameid.toString().padStart(10)+'\t'+row.opponent+'\t'+"("+result+")"+'\t'+kingdomCards.toString().substring(0,40)+'...\n';
-                        } 
-                        prevMsg+='```';
-                        message.channel.send(prevMsg);
-                        //       message.channel.send({embed:{
-                        //         color: 0xFFFFFF,
-                        //         title: prevTitle,
-                        //         description: prevMsg,
-                        //            }});
-                    }
-                    else  {
-                        message.author.send("No games found.");
-                    }
-                }).catch((err) => { logger.error( err); throw err })
-                }
-            }).catch((err) => { logger.error(err); throw err })
-    }
-}
 
-if(msg.startsWith(prefix+'text')) {
-    if(nicify(msg.replace(prefix+'text',''))=='help') {
-        logger.info('Display help message for text');
-        helpMsg='The "!text" command displays the basic information and instructions found on the specified card-shaped thing. The bar is colored according to type (i.e. Card, Project, Event, Boon etc.).\n\nExamples:```!text Expedition``````!text Page```';
-        message.channel.send(helpMsg);
-    } else {
-        logCommand('text');
-        var cardname=nicify(msg.replace(prefix+'text',''));
-        var info=fullInfo.filter(function(x) { return x.nicename==cardname})[0];
-        var cardText=info.text.replace("''(","*").replace(")''","*");
-        var color='14342874';
-        switch(info.type) {
-            case 'Project':
-                color='14720397';
-                break;
-            case 'Landmark':
-                color='4289797';
-                break;
-            case 'Event':
-                color='10197915';
-                break;
-            case 'Hex':
-                color='12807124';
-                break;
-            case 'Boon':
-                color='16774256';
-                break;
-            case 'State':
-                color='1';
-                break;
-            case 'Artifact':
-                color='9131818';
-                break;
-            default:
-                color='14342874';
+    if(msg.startsWith(prefix+'match')) {
+        if(nicify(msg.replace(prefix+'match',''))=='help') {
+            logger.info('Display help message for match');
+            helpMsg='The "!match" commands displays a brief summary of the previous 6 games (rated or unrated) between the two given players. This can be used, for example, to provide a summary of a recently played Dominion League match.\n\nExample:```!match Freaky,Cave-o-sapien```';
+            message.channel.send(helpMsg);
+        } else {
+            logCommand('match');
+            var users = msg.replace(prefix+'match','').split(",").map(function(x) {
+                return x.trim();});
+            logger.info('Looking up previous 6 games for '+users);
+            var players=[];
+
+            knex('users')
+                .where('name',users[0])
+                .first('id','name')
+                .then(function(user1Row) {
+                    if(!user1Row) {
+                        message.author.send("No user found with name '"+users[0]+"'");
+                        return null;
+                    } else  {
+                        console.log('Player 1 id: '+user1Row.id);
+                        players.push({id:user1Row.id,name:user1Row.name,wins:0});
+                        return knex('users').where('name',users[1]).first('id','name').then(function(user2Row) {
+                            if(!user2Row) {
+                                message.author.send("No user found with name '"+users[1]+"'");
+                                return null;
+                            } else  {
+                                console.log('Player 2 id: '+user2Row.id);
+                                players.push({id:user2Row.id,name:user2Row.name,wins:0});
+                                var maxGameId;
+                                if(gameCache.length>0) {
+                                    maxGameId=Math.max.apply(null,gameCache.keys());
+                                } else {
+                                    maxGameId=0;
+                                }
+                                return knex('gameresults').whereNotNull('gameresult').orderBy('gameid','desc').first('gameid').then(function(gameIdRow) {
+                                    if(!gameIdRow) {
+                                        logger.info('Error finding max game id');
+                                        return null;
+                                    } else {
+                                        return knex('gameresults').whereNotNull('gameresult').andWhere('gameid','>',Math.max(gameIdRow.gameid-30000,maxGameId-1000))
+                                    .select('gameid','pregame','gameresult').then(function(rows) {
+                                        if(rows.length>0) {
+                                            for(row of rows) {
+                                                if(!gameCache.has(row.gameid)) {
+                                                    var gameInfo=JSON.parse(row.pregame);
+                                                    var gameResults=JSON.parse(row.gameresult);
+
+                                                    if(gameInfo && gameResults && gameResults.playerResults.length==2) {
+                                                        var kingdom=gameInfo.gameParameters.setupInstructions.kingdom.map(function(x) {
+                                                            return nicify(x);});
+                                                        var kingdomCards=fullInfo.filter(function(x){return kingdom.includes(x.nicename)}).map(function(x) {
+                                                            return x.name});
+                                                        
+                                                        delete gameResults.playerResults[0].ownedCards;
+                                                        delete gameResults.playerResults[1].ownedCards;
+                                                        delete gameResults.playerResults[0].score.parts;
+                                                        delete gameResults.playerResults[1].score.parts;
+
+                                                        gameCache.set(row.gameid,
+                                                            {empty:gameResults.emptyPiles,
+                                                               shelters:gameInfo.gameParameters.setupInstructions.usesShelters,
+                                                               colony:gameInfo.gameParameters.setupInstructions.usesColonies,
+                                                               bane:gameInfo.gameParameters.setupInstructions.baneCard,
+                                                            kingdom:kingdomCards,
+                                                            results:gameResults.playerResults,
+                                                            players:gameInfo.playerIds});
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        var games=[];
+                                        logger.info('Game cache size:'+gameCache.length);
+                                        logger.info('About to go over each row of cache');
+                                        gameCache.forEach(function(row,gameid,index) {
+                                            if(games.length>10) {
+                                                // Can we do this differently?
+                                                //logger.info('Found 6 games, stopping');
+                                                return;
+                                            } else {
+                                                    if(row.players.length==2) {
+                                                        if((row.players[0].id==players[0].id && row.players[1].id==players[1].id) ||
+                                                            (row.players[1].id==players[0].id && row.players[0].id==players[1].id)) {
+                                                                if(row.results) {
+                                                                    var endCondition='';
+                                                                    console.log(row.empty)
+                                                                    if(row.empty.length>0) {
+                                                                        var emptyPilesNames=row.empty.map(function(x) {
+                                                                            return nicify(x);});
+                                                                        var emptyPiles=fullInfo.filter(function(x){return emptyPilesNames.includes(x.nicename)}).map(function(x) {
+                                                                            return x.name}).join(', ');
+                                                                    } else {
+                                                                        var emptyPiles='';
+                                                                    }
+                                                                    if(row.empty.indexOf('KNIGHT_PILE')>-1)
+                                                                        emptyPiles+=', Knights';
+                                                                    if(row.empty.indexOf('RUIN_PILE')>-1)
+                                                                        emptyPiles+=', Ruins';
+                                                                    if(row.empty.indexOf('CASTLE_PILE')>-1)
+                                                                        emptyPiles+=', Castles';
+
+                                                                    var scoreSummary='';
+                                                                    var totalTurns=0;
+                                                                    row.results.sort(function(a,b) { 
+                                                                        return(row.players.findIndex(x=>x.id==a.playerId.id) <
+                                                                            row.players.findIndex(x=>x.id==b.playerId.id) ? -1 :1)});
+
+
+                                                                    for(playerResult of row.results) {
+                                                                        if(playerResult.resigned==0) {
+                                                                            endCondition='Resigned';
+                                                                        }
+                                                                        scoreSummary+=playerResult.rank==1?'__':'';
+                                                                        scoreSummary+=(players[0].id==playerResult.playerId.id)?players[0].name:players[1].name;
+                                                                        scoreSummary+=playerResult.rank==1?'__':'';
+                                                                        scoreSummary+=(playerResult.score.totalPoints<0)?': −':': ';
+                                                                        //scoreSummary+=Math.abs(playerResult.score.totalPoints)+((playerResult.resigned==0)?' (resigned)':'');
+                                                                        scoreSummary+=Math.abs(playerResult.score.totalPoints);
+                                                                        scoreSummary+=', ';
+                                                                        totalTurns+=playerResult.score.usedTurns;
+                                                                    }
+                                                                    if(totalTurns>2) {
+                                                                        scoreSummary=scoreSummary.replace(/(, $)/g,'');
+                                                                        logger.info('Score summary: '+scoreSummary);
+
+                                                                        if(emptyPilesNames) {
+                                                                            if(emptyPilesNames.indexOf('colony')>=0) {
+                                                                                endCondition='Colonies';
+                                                                            } else if(emptyPilesNames.indexOf('province')>=0) {
+                                                                                endCondition='Provinces';
+                                                                            } else if(emptyPilesNames.length>=3) {
+                                                                                endCondition='3-pile';
+                                                                            }
+                                                                        }
+                                                                        var winners=row.results.filter(function(x) {return x.rank==1}).map(function(x) {
+                                                                            if(players[0].id==x.playerId.id) {
+                                                                                return players[0].name;
+                                                                            } else {
+                                                                                if(players[1].id==x.playerId.id) {
+                                                                                    return players[1].name;
+                                                                                }
+                                                                            } 
+                                                                            return '';
+                                                                        });
+                                                                        if(winners.length>1) {
+                                                                            games.push({gameid:gameid,score:scoreSummary,end:endCondition,winner:"Tie",kingdom:row.kingdom.join(', ')+(row.colony?'; Colony':'')+(row.shelters?'; Shelters':''),empty:emptyPiles,turns:(totalTurns%2==0)?(totalTurns/2).toFixed(0):(totalTurns/2).toFixed(1)});
+                                                                            players[0].wins+=0.5;
+                                                                            players[1].wins+=0.5;
+                                                                        } else {
+                                                                            games.push({gameid:gameid,score:scoreSummary,end:endCondition,winner:winners[0],kingdom:row.kingdom.join(', ')+(row.colony?'; Colony':'')+(row.shelters?'; Shelters':''),empty:emptyPiles,turns:(totalTurns%2==0)?(totalTurns/2).toFixed(0):(totalTurns/2).toFixed(1)});
+                                                                            if(winners[0]==user1Row.name) {
+                                                                                players[0].wins++;
+                                                                            } else {
+                                                                                players[1].wins++;
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                    }
+                                                }
+                                        })
+
+                                        logger.info('Game Cache size:'+gameCache.length);
+                                        var embedFields=[];
+                                        games.sort(function(a,b) { return(a.gameid < b.gameid) ? -1 : (a.gameid > b.gameid) ? 1 : 0;});
+                                        for(game of games) {
+                                            embedFields.push({name:game.score+' ('+game.end+', '+game.turns+' turns)',value:'*'+game.gameid+'* — '+game.kingdom+((game.empty.length>0)?' — *Empty piles: '+game.empty+'*':'')});
+                                        }
+
+                                        message.channel.send({embed:{
+                                            color: 3447003,
+                                            //title: players[0].name +" v. "+players[1].name+' (click to submit)',
+                                            title: players[0].name +" v. "+players[1].name,
+                                            description: players[0].wins+"–"+players[1].wins,
+                                            //url: 'https://docs.google.com/forms/d/e/1FAIpQLScwQkjJlnS8QX2Oi4x2AsoA-8CSQaSUmC_SDPDW4zpqhIA7NQ/formResponse?entry.843892210='+players[0].name+'&entry.1368919651='+players[0].wins+'&entry.589331394='+players[1].name+'&entry.1911195639='+players[1].wins+'&submit=Submit',
+                                            //url: 'https://docs.google.com/forms/d/e/1FAIpQLScwQkjJlnS8QX2Oi4x2AsoA-8CSQaSUmC_SDPDW4zpqhIA7NQ/viewform?entry.843892210='+players[0].name+'&entry.1368919651='+players[0].wins+'&entry.589331394='+players[1].name+'&entry.1911195639='+players[1].wins,
+                                            fields:embedFields}});
+                                    }).catch((err) => {logger.error(err); throw err})
+                                    }
+                                }).catch((err) => { logger.error(err); throw err})
+                            }
+                        }).catch((err) => { logger.error(err); throw err})
+                    }
+                }).catch((err) => {logger.error(err); throw err})
         }
-        if(info) {
-            if(cardText.indexOf("---")>0) {
-                var aboveLine=cardText.split("---")[0];
-                var belowLine=cardText.split("---")[1];
-                message.channel.send({embed:{   
-                    color: color,
-                    title: info.name,
-                    //description: "*"+info.type+"*\n"+aboveLine,
-                    description: aboveLine,
-                    fields:[{name:"__                          __",value:belowLine}]}});
-                //fields:[{name:"———————————————————",value:belowLine}]}});
-    } else  {
-        message.channel.send({embed:{   
-            color: color,
-            title: info.name,
-            // description: "*"+info.type+"*\n"+info.text}});
-            description: cardText}});
+    }
+
+
+    if(msg.startsWith(prefix+'prior')) {
+        if(nicify(msg.replace(prefix+'prior',''))=='help') {
+            logger.info('Display help message for previous');
+            helpMsg='The "!prior" commands displays a brief summary of the previous 5 games for the indicated user, including game IDs and a comma-separated list of the kingdom cards (that can be pasted into the card selection window at Dominion Online).\n\nExample:```!prior crlundy```';
+            message.channel.send(helpMsg);
+        } else {
+            logCommand('prior');
+            var user = msg.replace(prefix+'prior','').trim();
+            const ratingShift=50;
+            const ratingScale=7.5;
+            knex('users').where('name',user).first('id')
+                .then(function(uidRow) {
+                    if(!uidRow) {
+                        message.author.send("No user found with that name.");
+                        return null;
+                    } else  {
+                        return knex.from('ratingresults as rr')
+                    .join('users as u2','rr.opponent','=','u2.id')
+                    .join('users as u1','rr.user','=','u1.id')
+                    .join('gameresults as gr','gr.gameid','=','rr.gameid')
+                    .where('rr.ratingType', 0)
+                    .andWhere('rr.user',uidRow.id)
+                    .select('u1.name', 'u2.name as opponent','rr.gameid','rr.score','gr.gameid','gr.gameresult','gr.pregame')
+                    .orderBy('gr.gameid','desc')
+                    .limit(5)
+                    .then(function(rows) {
+                        if(rows.length>0) {
+                            var paddingLength=rows.reduce(function(a,b) {return a.opponent.length > b.opponent.length ? a:b;}).opponent.length;
+                            var prevMsg='';
+                            var prevTitle='Recent games';
+                            var games=[];
+                            for(row of rows) {
+                                var gameInfo=JSON.parse(row.pregame);
+                                if(gameInfo) {
+                                    kingdom=gameInfo.gameParameters.setupInstructions.kingdom.map(function(x) {
+                                        return nicify(x);});
+                                    kingdomCards=fullInfo.filter(function(x){return kingdom.includes(x.nicename)}).map(function(x) {
+                                        return x.name});
+                                }
+                                var result=(row.score==1) ? 'W' : (row.score==0.5) ? 'D' : 'L';
+                                games.push({gameid:row.gameid,opponent:row.opponent,result:result,kingdom:kingdomCards.join(', ')});
+                                //prevMsg+="**"+row.gameid.toString().padStart(10)+'**\t'+row.opponent+'\t'+"("+result+")"+'\t'+kingdomCards.toString().substring(0,60)+'...\n';
+                            } 
+                            message.channel.send({embed:{
+                                color: 3447003,
+                                title: prevTitle,
+                                //  description: prevMsg,
+                                fields:[{
+                                    name:games[0].gameid + " v. *"+games[0].opponent+" ("+games[0].result+")*",
+                                value:games[0].kingdom},
+                                {name:games[1].gameid + " v. *"+games[1].opponent+" ("+games[1].result+")*",
+                                    value:games[1].kingdom},
+                                {name:games[2].gameid + " v. *"+games[2].opponent+" ("+games[2].result+")*",
+                                    value:games[2].kingdom},
+                                {name:games[3].gameid + " v. *"+games[3].opponent+" ("+games[3].result+")*",
+                                    value:games[3].kingdom},
+                                {name:games[4].gameid + " v. *"+games[4].opponent+" ("+games[4].result+")*",
+                                    value:games[4].kingdom}]}});
+                        }
+                        else  {
+                            message.author.send("No games found.");
+                        }
+                    }).catch((err) => { logger.error( err); throw err })
+                    }
+                }).catch((err) => { logger.error(err); throw err })
+        }
+    }
+    if(msg.startsWith(prefix+'previous')) {
+        if(nicify(msg.replace(prefix+'previous',''))=='help') {
+            logger.info('Display help message for previous');
+            helpMsg='The "!previous" commands displays a brief summary of the previous 10 games, including game IDs.\n\nUsage: ```!previous <user>```\nExample:```!previous Cave-o-sapien```';
+            message.channel.send(helpMsg);
+        } else {
+            var user = msg.replace(prefix+'previous','').trim();
+            logger.info('Looking up unprocessed results for '+user);
+            const ratingShift=50;
+            const ratingScale=7.5;
+            knex('users').where('name',user).first('id')
+                .then(function(uidRow) {
+                    if(!uidRow) {
+                        message.author.send("No user found with that name.");
+                        return null;
+                    } else  {
+                        return knex.from('ratingresults as rr')
+                    .join('users as u2','rr.opponent','=','u2.id')
+                    .join('users as u1','rr.user','=','u1.id')
+                    .join('gameresults as gr','gr.gameid','=','rr.gameid')
+                    .where('rr.ratingType', 0)
+                    .andWhere('rr.user',uidRow.id)
+                    //.andWhere('rr.processed',0)
+                    .select('u1.name', 'u2.name as opponent','rr.gameid','rr.score','gr.gameid','gr.gameresult','gr.pregame')
+                    .orderBy('gr.gameid','desc')
+                    .limit(10)
+                    .then(function(rows) {
+                        if(rows.length>0) {
+                            var paddingLength=rows.reduce(function(a,b) {return a.opponent.length > b.opponent.length ? a:b;}).opponent.length;
+                            var prevMsg='```'+String('ID').padStart(10)+'\t'+String('Opponent').padStart(paddingLength)+'\tResult\tKingdom\n';
+                            prevMsg+=String('—').repeat(10+6+43+paddingLength+(4*3))+'\n';
+                            //     var prevTitle='Recent games';
+                            //     var prevMsg='';
+                            for(row of rows) {
+                                var gameInfo=JSON.parse(row.pregame);
+                                if(gameInfo) {
+                                    kingdom=gameInfo.gameParameters.setupInstructions.kingdom.map(function(x) {
+                                        return nicify(x);});
+                                    kingdomCards=fullInfo.filter(function(x){return kingdom.includes(x.nicename)}).map(function(x) {
+                                        return x.name});
+                                }
+                                var result=(row.score==1) ? 'W' : (row.score==0.5) ? 'D' : 'L';
+                                prevMsg+=row.gameid.toString().padStart(10)+'\t'+row.opponent.padStart(paddingLength)+'\t'+result.padStart(6)+'\t'+kingdomCards.toString().substring(0,40)+'...\n';
+                                //prevMsg+=row.gameid.toString().padStart(10)+'\t'+row.opponent+'\t'+"("+result+")"+'\t'+kingdomCards.toString().substring(0,40)+'...\n';
+                            } 
+                            prevMsg+='```';
+                            message.channel.send(prevMsg);
+                            //       message.channel.send({embed:{
+                            //         color: 0xFFFFFF,
+                            //         title: prevTitle,
+                            //         description: prevMsg,
+                            //            }});
+                        }
+                        else  {
+                            message.author.send("No games found.");
+                        }
+                    }).catch((err) => { logger.error( err); throw err })
+                    }
+                }).catch((err) => { logger.error(err); throw err })
+        }
+    }
+
+    if(msg.startsWith(prefix+'text')) {
+        if(nicify(msg.replace(prefix+'text',''))=='help') {
+            logger.info('Display help message for text');
+            helpMsg='The "!text" command displays the basic information and instructions found on the specified card-shaped thing. The bar is colored according to type (i.e. Card, Project, Event, Boon etc.).\n\nExamples:```!text Expedition``````!text Page```';
+            message.channel.send(helpMsg);
+        } else {
+            logCommand('text');
+            var cardname=nicify(msg.replace(prefix+'text',''));
+            var info=fullInfo.filter(function(x) { return x.nicename==cardname})[0];
+            var cardText=info.text.replace("''(","*").replace(")''","*");
+            var color='14342874';
+            switch(info.type) {
+                case 'Project':
+                    color='14720397';
+                    break;
+                case 'Landmark':
+                    color='4289797';
+                    break;
+                case 'Event':
+                    color='10197915';
+                    break;
+                case 'Hex':
+                    color='12807124';
+                    break;
+                case 'Boon':
+                    color='16774256';
+                    break;
+                case 'State':
+                    color='1';
+                    break;
+                case 'Artifact':
+                    color='9131818';
+                    break;
+                default:
+                    color='14342874';
             }
+            if(info) {
+                if(cardText.indexOf("---")>0) {
+                    var aboveLine=cardText.split("---")[0];
+                    var belowLine=cardText.split("---")[1];
+                    message.channel.send({embed:{   
+                        color: color,
+                        title: info.name,
+                        //description: "*"+info.type+"*\n"+aboveLine,
+                        description: aboveLine,
+                        fields:[{name:"__                          __",value:belowLine}]}});
+                    //fields:[{name:"———————————————————",value:belowLine}]}});
+        } else  {
+            message.channel.send({embed:{   
+                color: color,
+                title: info.name,
+                // description: "*"+info.type+"*\n"+info.text}});
+                description: cardText}});
+    }
 //Name: '+info.name+'\n'+info.text);
 logger.info('Sent card text for: '+cardname);
 }
@@ -966,7 +1203,8 @@ if(msg.startsWith(prefix+'versus')) {
                             var player2=rows[0].opponent;
                             for(row of rows) {
                                 expected+=glicko.expectedWins(row.user_mu,Array({win:row.score,mu:row.opp_mu,phi:row.opp_phi})).expected;
-                                logger.info('Running count of expected wins: '+expected);
+                                console.log(row);
+                                logger.info('Expected running total: '+expected);
                                 if(row.score==0.5) {
                                     wins[2]++;
                                     logger.info(row.user+" "+row.opponent+" "+row.count+" "+row.score);
@@ -981,17 +1219,23 @@ if(msg.startsWith(prefix+'versus')) {
                             }
                             logger.info('Results: '+wins[0]+"-"+wins[1]+"-"+wins[2]);
                             if(wins[2]>0) {
-                                var winColor=parseInt(ratingGradient.rgbAt((wins[0]+0.5*wins[2])/(wins[0]+wins[1]+wins[2])).toHex(),16);
+                                var performance=wins[0]+0.5*wins[2]-expected;
+                                var perfIndex=Math.max(Math.min(performance,2),-2)/4 + 0.5;
+                                var winColor=parseInt(ratingGradient.rgbAt(perfIndex).toHex(),16);
+                                //var winColor=parseInt(ratingGradient.rgbAt((wins[0]+0.5*wins[2])/(wins[0]+wins[1]+wins[2])).toHex(),16);
                                 message.channel.send({embed:{
                                     color: winColor,
                                     title: player1+' v. '+player2 + " (W–L–D)",
-                                    description: wins[0]+'–'+wins[1]+'–'+wins[2]+'\nExpected wins: '+expected.toFixed(2)}});
+                                    description: wins[0]+'–'+wins[1]+'–'+wins[2]+'\nPerformance: '+(performance<0?"":"+")+performance.toFixed(2)}});
                             } else {
-                                var winColor=parseInt(ratingGradient.rgbAt(wins[0]/(wins[0]+wins[1])).toHex(),16);
+                                var performance=wins[0]-expected;
+                                var perfIndex=Math.max(Math.min(performance,2),-2)/4 + 0.5;
+                                var winColor=parseInt(ratingGradient.rgbAt(perfIndex).toHex(),16);
+                                //var winColor=parseInt(ratingGradient.rgbAt(wins[0]/(wins[0]+wins[1])).toHex(),16);
                                 message.channel.send({embed:{
                                     color: winColor,
                                     title: player1+' v. '+player2 +" (W–L)",
-                                    description: wins[0]+'–'+wins[1]+'\nExpected wins: '+expected.toFixed(2)}});
+                                    description: wins[0]+'–'+wins[1]+'\nPerformance: '+(performance<0?"":"+")+performance.toFixed(2)}});
                             }
                         } else  {
                             message.author.send("No data found");
