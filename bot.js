@@ -737,12 +737,10 @@ bot.on('ready', function (evt) {
                                 }
                                 var result=(row.score==1) ? 'W' : (row.score==0.5) ? 'D' : 'L';
                                 games.push({gameid:row.gameid,opponent:row.opponent,result:result,kingdom:kingdomCards.join(', ')});
-                                //prevMsg+="**"+row.gameid.toString().padStart(10)+'**\t'+row.opponent+'\t'+"("+result+")"+'\t'+kingdomCards.toString().substring(0,60)+'...\n';
                             } 
                             message.channel.send({embed:{
                                 color: 3447003,
                                 title: prevTitle,
-                                //  description: prevMsg,
                                 fields:[{
                                     name:games[0].gameid + " v. *"+games[0].opponent+" ("+games[0].result+")*",
                                 value:games[0].kingdom},
@@ -868,18 +866,14 @@ bot.on('ready', function (evt) {
                     message.channel.send({embed:{   
                         color: color,
                         title: info.name,
-                        //description: "*"+info.type+"*\n"+aboveLine,
                         description: aboveLine,
                         fields:[{name:"__                          __",value:belowLine}]}});
-                    //fields:[{name:"———————————————————",value:belowLine}]}});
         } else  {
             message.channel.send({embed:{   
                 color: color,
                 title: info.name,
-                // description: "*"+info.type+"*\n"+info.text}});
                 description: cardText}});
     }
-//Name: '+info.name+'\n'+info.text);
 logger.info('Sent card text for: '+cardname);
 }
 }
@@ -958,9 +952,6 @@ if(msg.startsWith(prefix+'results')) {
                             var userPhi=currentRatingRow.deviation;
                             var userSigma=currentRatingRow.volatility;
                             if(rows.length>0) {
-                                //var userMu=rows[0].user_mu;
-                                //var userPhi=rows[0].user_phi;
-                                //var userSigma=rows[0].user_sigma;
                                 var resultsArray=[]; 
                                 for(row of rows) {
                                     if(row.opp_mu == null) row.opp_mu = 0;
@@ -1012,7 +1003,6 @@ if(msg.startsWith(prefix+'chart')) {
         message.channel.send(helpMsg);
     } else {
         var user = msg.replace(prefix+'chart','').trim();
-        // Change to allow user to go back X periods?
         const ratingShift=50;
         const ratingScale=7.5;
         logger.info('Generating rating chart for '+user);
@@ -1222,7 +1212,6 @@ if(msg.startsWith(prefix+'versus')) {
                                 var performance=wins[0]+0.5*wins[2]-expected;
                                 var perfIndex=Math.max(Math.min(performance,2),-2)/4 + 0.5;
                                 var winColor=parseInt(ratingGradient.rgbAt(perfIndex).toHex(),16);
-                                //var winColor=parseInt(ratingGradient.rgbAt((wins[0]+0.5*wins[2])/(wins[0]+wins[1]+wins[2])).toHex(),16);
                                 message.channel.send({embed:{
                                     color: winColor,
                                     title: player1+' v. '+player2 + " (W–L–D)",
@@ -1231,7 +1220,6 @@ if(msg.startsWith(prefix+'versus')) {
                                 var performance=wins[0]-expected;
                                 var perfIndex=Math.max(Math.min(performance,2),-2)/4 + 0.5;
                                 var winColor=parseInt(ratingGradient.rgbAt(perfIndex).toHex(),16);
-                                //var winColor=parseInt(ratingGradient.rgbAt(wins[0]/(wins[0]+wins[1])).toHex(),16);
                                 message.channel.send({embed:{
                                     color: winColor,
                                     title: player1+' v. '+player2 +" (W–L)",
