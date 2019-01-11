@@ -455,7 +455,7 @@ bot.on('ready', function (evt) {
                 name:'Card info',
             value:'**!history** secret history for a card-shaped thing\n**!art** illustration for a card-shaped thing\n**!text** text for a card-shaped thing'},
             {name:'Shuffle iT info',
-                value:'**!kingdom** generate kingdom image from game ID or CSV list\n**!rating** player rating\n**!leader** current leaderboard\n**!peers** players with similar rank\n**!chart** longitudinal rating chart\n**!versus** head-to-head results for two players\n**!results** unprocessed game results\n**!prior** summary of prior five games'},
+                value:'**!kingdom** generate kingdom image from game ID or CSV list\n**!rating** player rating\n**!leader** current leaderboard\n**!peers** players with similar rank\n**!chart** longitudinal rating chart\n**!versus** head-to-head results for two players\n**!results** unprocessed game results\n**!prior** summary of prior five games\n**!match** summary of *recent* games between two players'},
             {name:'More info',
                 value:'Each of these commands also works in a direct message to the bot.\nMore information for each command available by appending the word \'help\' to that command: e.g.```!kingdom help```'}]}});
     }
@@ -510,7 +510,7 @@ bot.on('ready', function (evt) {
     if(msg.startsWith(prefix+'match')) {
         if(nicify(msg.replace(prefix+'match',''))=='help') {
             logger.info('Display help message for match');
-            helpMsg='The "!match" commands displays a brief summary of the previous 6 games (rated or unrated) between the two given players. This can be used, for example, to provide a summary of a recently played Dominion League match.\n\nExample:```!match Freaky,Cave-o-sapien```';
+            helpMsg='The "!match" commands displays a brief summary of recent games (rated or unrated) between the two given players. This can be used, for example, to provide a summary of a recently played Dominion League match.\n\nExample:```!match Freaky,Cave-o-sapien```';
             message.channel.send(helpMsg);
         } else {
             logCommand('match');
@@ -1433,7 +1433,7 @@ if(msg.startsWith(prefix+'history')) {
 // Display formatted kingdom image
 if(msg.startsWith(prefix+'kingdom')) {
     if(nicify(msg.replace(prefix+'kingdom',''))=='help') {
-        helpMsg='The "!kingdom" command displays a kingdom image based on *either* a Shuffle iT game ID or comma-separated list of cards, events and landmarks. For the CSV-list version, it requires at least 10 unique cards. If a Looter is included but no specific Ruin is specified, one will be randomly chosen and included. Likewise, if the list includes "Knights" but no named Knight, then one will be randomly chosen. The Young Witch Bane can be indicated by a "(b)" after the desired Bane card name. No Bane will be automatically included (at this time). If either Colony or Platinum is included in the list, both will be displayed.\n\nExample: ```!kingdom knights,artificer,market,tomb,bonfire,urchin,relic,death cart,vampire,bandit camp,dungeon(b),young witch,werewolf``````!kingdom 21278249```';
+        helpMsg='The "!kingdom" command displays a kingdom image based on *either* a Shuffle iT game ID or comma-separated list of cards, events and landmarks. If a Looter is included but no specific Ruin is specified, one will be randomly chosen and included. Likewise, if the list includes "Knights" but no named Knight, then one will be randomly chosen. The Young Witch Bane can be indicated by a "(b)" after the desired Bane card name. No Bane will be automatically included (at this time). The Obelisk pile can be indicated with "(o)" after the desired card name. If the Bane and Obelisk card are the same, use "(o)(b)". For kingdoms drawn based on game ID, the Obelisk pile will not show if neither player has a card from that pile in their deck at game end. If either Colony or Platinum is included in the list, both will be displayed.\n\nExample: ```!kingdom knights,artificer,market,tomb,bonfire,urchin,relic,death cart,vampire,bandit camp,dungeon(b),young witch,werewolf``````!kingdom 21278249```';
         message.channel.send(helpMsg);
     } else {
         logCommand('kingdom');
