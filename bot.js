@@ -391,7 +391,8 @@ function drawKingdom(err, kingdom, msgCallback) {
 }
 
 bot.on('ready', function (evt) {
-    logger.info('Connected');
+    bot.user.setActivity('type !help');
+    logger.info('Connected '+moment().format());
     logger.info('Logged in as: '+bot.user.username + ' - (' + bot.user.id + ')');
         });
     bot.on('message', message => {
@@ -985,13 +986,15 @@ if(msg.startsWith(prefix+'versus')) {
                                 message.channel.send({embed:{
                                     color: winColor,
                                     title: player1+' v. '+player2 + " (W–L–D)",
-                                    description: wins[0]+'–'+wins[1]+'–'+wins[2]+'\nExpected wins: '+expected.toFixed(2)}});
+                                    //description: wins[0]+'–'+wins[1]+'–'+wins[2]+'\nExpected wins: '+expected.toFixed(2)}});
+                                    description: wins[0]+'–'+wins[1]+'–'+wins[2]}});
                             } else {
                                 var winColor=parseInt(ratingGradient.rgbAt(wins[0]/(wins[0]+wins[1])).toHex(),16);
                                 message.channel.send({embed:{
                                     color: winColor,
                                     title: player1+' v. '+player2 +" (W–L)",
-                                    description: wins[0]+'–'+wins[1]+'\nExpected wins: '+expected.toFixed(2)}});
+                                    //description: wins[0]+'–'+wins[1]+'\nExpected wins: '+expected.toFixed(2)}});
+                                    description: wins[0]+'–'+wins[1]}});
                             }
                         } else  {
                             message.author.send("No data found");
