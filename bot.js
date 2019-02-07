@@ -85,7 +85,7 @@ function periodToDate(startDate, period) {
 }
 
 function nicify(inputName) {
-    return inputName.trim().replace(/'|’/g,"").replace(/\s/g,"-").replace(/_/g,"-").toLowerCase();
+    return inputName.trim().replace(/'|’/g,"").replace(/\s/g,"-").replace(/_/g,"-").toLowerCase().replace(/^the-/,"");
 }
 
 function mapWinColor(p) {
@@ -423,7 +423,12 @@ function drawKingdom(err, kingdom, msgCallback) {
             //}
 
             for(var i=0; i<csoFiles.length;i++) {
-                gmCommand = gmCommand + ".in('-page','+"+i*(csoWidth+padding)+"+"+2*(padding+cardHeight)+"').in('"+csoFiles[i]+"')";
+                var rowCount=0;
+                if(row1.length>0)
+                    rowCount++;
+                if(row2.length>0)
+                    rowCount++;
+                gmCommand = gmCommand + ".in('-page','+"+i*(csoWidth+padding)+"+"+rowCount*(padding+cardHeight)+"').in('"+csoFiles[i]+"')";
             }
             // Handle this with a series of callbacks instead of eval?
             gmCommand = gmCommand + ".mosaic().background('transparent').stream('miff').pipe(passThrough);";
@@ -473,7 +478,7 @@ bot.on('ready', function (evt) {
                 name:'Card info',
             value:'**!history** secret history for a card-shaped thing\n**!art** illustration for a card-shaped thing\n**!text** text for a card-shaped thing'},
             {name:'Shuffle iT info',
-                value:'**!kingdom** generate kingdom image from game ID or CSV list\n**!rating** player rating\n**!leader** current leaderboard\n**!peers** players with similar rank\n**!chart** longitudinal rating chart\n**!versus** head-to-head results for two players\n**!results** unprocessed game results\n**!prior** summary of prior five games\n**!match** summary of *recent* games between two players'},
+                value:'**!kingdom** generate kingdom image from game ID or comma-separated list\n**!rating** player rating\n**!leader** current leaderboard\n**!peers** players with similar rank\n**!chart** longitudinal rating chart\n**!versus** head-to-head results for two players\n**!results** unprocessed game results\n**!prior** summary of prior five games\n**!match** summary of *recent* games between two players'},
             {name:'More info',
                 value:'Each of these commands also works in a direct message to the bot.\nMore information for each command available by appending the word \'help\' to that command: e.g.```!kingdom help```'}]}});
     }
